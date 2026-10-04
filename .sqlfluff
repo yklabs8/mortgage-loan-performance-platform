@@ -1,0 +1,36 @@
+# sqlfluff configuration: Oracle dialect; formatting follows the Trivadis PL/SQL & SQL Coding Guidelines v4.4,
+# everything else uses sqlfluff defaults
+[sqlfluff]
+dialect = oracle
+# sqlfluff skips files larger than this limit (to avoid slow parsing); raised to 50 KB so that
+# larger stored-procedure files are still checked (project convention)
+large_file_skip_byte_limit = 50000
+
+# Trivadis formatting rule 2: indent with 3 spaces
+[sqlfluff:indentation]
+tab_space_size = 3
+
+# Trivadis formatting rule 5: leading commas
+[sqlfluff:layout:type:comma]
+line_position = leading
+
+# Line length is still checked at the default 80, but -- comment lines are not (project convention).
+# Column comment statements (comment on) are exempted with noqa markers in the SQL files, with the reason stated there
+[sqlfluff:rules:layout.long_lines]
+ignore_comment_lines = True
+
+# Trivadis formatting rule 1: keywords and names in lower case
+[sqlfluff:rules:capitalisation.keywords]
+capitalisation_policy = lower
+
+[sqlfluff:rules:capitalisation.identifiers]
+extended_capitalisation_policy = lower
+
+[sqlfluff:rules:capitalisation.functions]
+extended_capitalisation_policy = lower
+
+[sqlfluff:rules:capitalisation.literals]
+capitalisation_policy = lower
+
+[sqlfluff:rules:capitalisation.types]
+extended_capitalisation_policy = lower

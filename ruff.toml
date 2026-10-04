@@ -1,0 +1,4 @@
+# ruff configuration: all formatting and lint rules use the defaults; this only tells ruff that the
+# project's Python source is in python/, so it can tell project modules (such as db) from third-party
+# packages and sort imports in the standard order
+src = ["python"]

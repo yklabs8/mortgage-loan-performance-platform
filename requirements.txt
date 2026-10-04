@@ -1,0 +1,11 @@
+# Name: requirements.txt
+# Purpose: Python packages used directly by this project, with pinned versions (same install on any machine)
+# Usage: python3.11 -m venv .venv && .venv/bin/pip install -r requirements.txt
+# Python version: 3.11 (python-oracledb supports 3.10 and later)
+
+# Runtime
+oracledb==26.0.1  # Oracle connection (python/db.py)
+
+# Checking tools
+ruff==0.16.9  # Python formatting and linting
+sqlfluff==4.3.0  # SQL formatting checks (configured in .sqlfluff)

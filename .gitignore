@@ -1,0 +1,14 @@
+# Files kept out of git
+# Raw data lives outside the repository in ../data/: the files are large, and Freddie Mac data may not be redistributed
+data/
+*.zip
+*.txt
+!requirements.txt
+# Python virtual environment and caches: can be recreated at any time
+.venv/
+__pycache__/
+.ruff_cache/
+# macOS folder metadata
+.DS_Store
+# Run logs
+logs/
