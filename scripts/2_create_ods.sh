@@ -14,4 +14,5 @@ done
 scripts/run_sql.sh source/ods/ods_exchange_stages.sql  # staging tables (load here first, swap in after checking)
 scripts/run_sql.sh checks/ods_file_hash.sql  # fingerprint of one release + one source file
 scripts/run_sql.sh source/ods/ods_exchange_file.sql  # check the fingerprint, then swap staging table and partition
+scripts/run_sql.sh checks/check_invalid_objects.sql  # fail if any schema object remains invalid after compilation
 echo "ODS objects created"  # success message

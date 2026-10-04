@@ -1,16 +1,53 @@
 # Mortgage Loan Performance Data Platform
 
-This milestone contains a raw-file checksum tool, Oracle operational data store (ODS) tables and loader, and a proposed loan-review system design. It does not yet build the downstream warehouse, analysis results, web application, or dashboards.
+This project builds an end-to-end data platform from Freddie Mac loan-level data. It is designed to ingest quarterly releases, detect and handle corrections to previously published history, build an Oracle warehouse, and produce quality-checked analysis results traceable to source files. This version, Milestone 2, contains the raw-archive checksum tool, Oracle ODS tables and loader, and the completed loan-review database design; the remaining components are shown below.
 
-## Scope of this version
+## What the platform does
 
-| Component | Available now |
-|---|---|
-| Raw archive manifest | Build a SHA-256 manifest for your own downloads, then verify the listed files on demand. A manifest for the files used in this project is included as `docs/raw_manifest.csv`. |
-| ODS | Four tables cover the origination and monthly performance files in the current and pre-July-2026 layouts. The loader records a release ID and source filename and replaces one file's partition through a staging table. |
-| OLTP | A 13-table design and ER diagram in `docs/oltp_design.md`; no OLTP deployment scripts are included yet. |
+| Component | What it does | Status |
+|---|---|---|
+| Raw archive | Records SHA-256 checksums in a manifest and verifies downloaded archives when the user runs the verification command; loading does not run this check automatically. | Done |
+| ODS layer | Loads origination and monthly files as text into four layout-specific Oracle tables, records release and source file, and replaces a file's partition through a checked staging table. | Done |
+| Release diff and targeted backfill | Compares releases to find revised history and recomputes affected downstream results. | Planned |
+| Data warehouse | Organizes loan-level history and dimensions for analysis in Oracle. | Planned |
+| Data quality and lineage | Checks downstream data and traces analysis results through processing steps to source files; ODS loading already checks row counts and content fingerprints. | Planned |
+| Large-scale processing | Uses Spark for larger volumes if benchmarks show it is needed. | Planned |
+| Loan-review application | The completed 13-table, third-normal-form OLTP design describes an Analyst/Manager review workflow, a Spring Boot interface, and timestamp-based CDC into the warehouse; implementation is scheduled for later milestones. | Design done |
+| Dashboards | Presents the analysis in Tableau. | Planned |
 
-Release comparison, warehouse transformations, data-quality rules beyond loader checks, analysis metrics, Spark processing, the review application, and dashboards are planned for later milestones. The intended analysis questions are delinquency transitions (including cures and repeat delinquency), outcomes after payment modification, and differences by origination year (vintage). No command in this version calculates those metrics.
+## What this version can run
+
+You can create or verify an archive manifest, inspect a downloaded sample, deploy the ODS objects, load one year's origination and monthly files, and run the database-backed ODS tests. The loan-review system is a completed design and ER diagram in `docs/oltp_design.md`; this version contains no runnable OLTP tables, web application, warehouse transformations, analysis results, Spark jobs, or dashboards.
+
+## Questions it answers
+
+Later milestones will produce results for three questions:
+
+1. How do loans move between delinquency states, including cures and repeat delinquency?
+2. What outcomes follow a payment modification?
+3. How does performance differ by origination year (vintage)?
+
+This version prepares the source and ODS data; it does not calculate those answers.
+
+## Status
+
+The repository is updated at each milestone and contains only the completed portions released so far. The schedule below records project status as of October 3, 2026; planned dates may change.
+
+| # | Milestone | Main deliverables | Target date | Status |
+|---|---|---|---|---|
+| 1 | Project Proposal | Project scope and plan. | 09/19/2026 | Done |
+| 2 | Environment, Source Data, and OLTP Design | Oracle in Docker; source manifest and profiling; loaded ODS; completed conceptual, logical, and relational OLTP models in 3NF. | 10/03/2026 | Done |
+| 3 | Thin End-to-End Path | One vintage through a first warehouse fact, one metric, one Tableau chart, and one review page; OLTP models in Data Modeler, generated DDL, and core tables. | 10/17/2026 | In progress |
+| 4 | Thicken the Databases and ETL | Full OLTP objects and tests; warehouse star schema, ETL, quality checks, reconciliation, and three analyses. | 10/31/2026 | Planned |
+| 5 | Thicken the Application and Change Processing | Analyst/Manager pages, access controls, timestamp CDC, release diff, targeted backfill, and lineage. | 11/14/2026 | Planned |
+| 6 | Dashboards, Spark scale-up, and end-to-end testing | Tableau dashboards, benchmark-guided Spark processing, and end-to-end tests; stretch: full-history Spark processing on a multi-node cluster. | 11/28/2026 | Planned |
+| 7 | Documentation and end-to-end demo | Documentation, demonstration, and rehearsal. | 12/06/2026 | Planned |
+
+## Design notes
+
+- The ODS stores source fields as text and adds `release_id` and `source_file`. Oracle stores empty strings as `NULL`, so this is not byte-for-byte preservation. Primary keys include `release_id`; versions of the same loan from different releases can coexist for later comparison.
+- Tables follow file layout, not release number: R45/R46 use the earlier layout tables and R47 uses the newer layout tables. A new release with the same layout reuses its layout's tables.
+- Reloading a file fills a staging table first, checks its row count and content fingerprint, and then exchanges the matching partition. The published partition is replaced as one operation rather than left half loaded.
 
 ## Source data
 
@@ -26,9 +63,9 @@ The provided manifest records six archives used in this project, including earli
 scripts/       Start an existing Oracle container, create a database user, deploy ODS, run SQL
 python/        Database connection, raw-file manifest, optional sample profiler, ODS loader
 source/ods/    Four ODS tables, staging tables, partition-exchange procedure, statistics
-checks/        ODS content fingerprint function
+checks/        ODS content fingerprint function; post-deployment invalid-object check
 test/          Database-backed loader tests
-docs/          Example raw manifest, proposed OLTP design and ER diagram
+docs/          Example raw manifest, completed OLTP design and ER diagram
 ```
 
 ## Setup and load one sample
