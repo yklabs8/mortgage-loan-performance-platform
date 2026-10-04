@@ -1,36 +1,37 @@
 # Loan-Review System (OLTP) Design
 
-A business system for manually reviewing loans flagged by rules. It reads from the data warehouse (to select candidate loans) and records the review process in its own normalized database; it never writes to the warehouse.
+A proposed business system for manually reviewing loans flagged by rules. In the design, it would read warehouse data to select candidates and record the review process in separate OLTP tables.
 
-Current stage: the conceptual, logical, and relational models are complete; tables, constraints, triggers, and stored procedures are implemented in later milestones.
+Current stage: this repository contains the 13-table model and ER diagram. It does not contain runnable OLTP tables, triggers, procedures, or an application.
 
 ## 1. Where the business process comes from
 
-Banks do not publish their internal review procedures, so the workflow was designed for this project as a simplified demonstration; it is not any bank's actual operating procedure. It combines two widely used patterns:
+This workflow is a simplified demonstration designed for this project; it is not a bank operating procedure. Its design uses two patterns:
 
-- **Case management:** a case with a status, an owner, notes, and a change history. The same structure appears in common case-management systems, for example Salesforce's Case, CaseComment, CaseHistory, and CaseStatus objects.
-- **The four-eyes principle (maker-checker):** one person prepares a review, a second, independent person approves it, a standard control in financial systems such as credit approval.
+- **Case management:** a case has a status, an assignee, notes, and a change history.
+- **Separate preparation and decision:** an Analyst records a review; a Manager makes the decision. This is the intended role split, not a claim that it represents a real institution's policy.
 
-The trigger, a loan that newly reaches 60+ days delinquent, comes directly from the delinquency status in the Freddie Mac monthly performance data. References to specific regulatory and servicing rules will be added after they are checked against the original texts.
+The proposed candidate rule compares successive monthly delinquency statuses and selects loans that newly reach 60 or more days delinquent. The monthly file provides the status field; the threshold is this project's proposed rule. Candidate selection is not implemented in this repository.
 
 ## 2. Business process
 
 ```
-The system selects loans that newly reach 60+ days delinquent (review_candidate)
+Planned: select loans that newly reach 60+ days delinquent (review_candidate)
   → a review case is opened for a candidate (risk_review_case, status OPEN)
   → a Manager assigns the case to an Analyst (case_assignment, status ASSIGNED)
   → the Analyst adds notes and the basis for a judgment (case_annotation, status IN_REVIEW)
   → the Manager decides: close (CLOSED), or escalate (ESCALATED → closed later)
-Every status change is recorded in case_status_history
+  → after closure, a Manager may reopen a case for further review (CLOSED → IN_REVIEW)
+Planned: record every status change in case_status_history
 ```
 
-Two roles: the **Analyst** reviews cases and writes notes; the **Manager** assigns cases and makes decisions.
+Two proposed roles: the **Analyst** reviews cases and writes notes; the **Manager** assigns cases and makes decisions.
 
 ## 3. Entity-relationship model
 
 ![OLTP entity-relationship model](img/oltp_er.png)
 
-All 13 tables with every column. PK = primary key, FK = foreign key, UK = unique key, `*` = mandatory (NOT NULL). Crow's-foot notation: `|` one, `o` zero (optional), `<` many. Where a table has several foreign keys to the same table, the line is labeled with the column (for example `assignee` and `assigned_by`).
+The diagram shows the 13 proposed tables and their columns. PK = primary key, FK = foreign key, UK = unique key, `*` = mandatory (NOT NULL). Crow's-foot notation: `|` one, `o` zero (optional), `<` many. Where a table has several foreign keys to the same table, the line is labeled with the column (for example `assignee` and `assigned_by`).
 
 ## 4. Logical and relational model (13 tables)
 
@@ -52,11 +53,11 @@ All 13 tables with every column. PK = primary key, FK = foreign key, UK = unique
 
 ## 5. Design rationale
 
-- **Third normal form (3NF):** every non-key column depends only on its table's primary key. A user's roles live in `user_role` (one user can have several roles); status names live once in `case_status`, not on every case.
-- **Every action is auditable:** assignments, notes, decisions, and status history are separate append-only tables, so who did what and when is never overwritten.
-- **Versioned rules:** thresholds live in `review_rule_version`; a candidate records the version that selected it, so changing a rule never changes the basis of earlier candidates.
-- **Status machine as data:** allowed status changes are rows in `case_status_transition`, checked by a trigger, so a case cannot jump from OPEN to CLOSED without review.
-- **Business keys, not surrogate keys:** a candidate refers to a loan by data source + loan number + source release, not by the warehouse surrogate key, which is regenerated on every reload. When a new release corrects a loan, the old candidate is kept as an audit record.
+- **Third normal form (3NF):** the proposed model separates roles, status labels, and rule parameters from cases rather than repeating them on each case.
+- **Audit history:** the design has separate assignment, note, decision, and status-history tables. The future implementation must enforce the intended append-only behavior.
+- **Versioned rules:** the design gives thresholds a version and records the selecting version on each candidate.
+- **Status transitions:** a transition table lists allowed changes. A future trigger must enforce those rows.
+- **Stable loan reference:** a candidate uses data source, loan identifier, and source release rather than a warehouse-generated key. The design retains an earlier candidate when a later release corrects that loan.
 
 ## 6. Limitations
 
@@ -66,5 +67,5 @@ All 13 tables with every column. PK = primary key, FK = foreign key, UK = unique
 
 ## 7. Next steps
 
-- Draw the Enterprise, Logical, and Relational models in Oracle SQL Developer Data Modeler and generate the DDL from the model
-- Implement tables, constraints, indexes, triggers (status-change checks, automatic status history), and stored procedures, and test each of them
+- Implement and test the proposed tables, constraints, indexes, triggers, and procedures in a later milestone.
+- Reconcile this diagram with the implementation when those files are published.
