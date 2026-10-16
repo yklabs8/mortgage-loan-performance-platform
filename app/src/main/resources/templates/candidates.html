@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments :: head('Review candidates')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main>
+  <h1>Review candidates</h1>
+  <form th:action="@{/candidates}" method="get" class="row">
+    <label>Loan ID <input type="text" name="loan" th:value="${loan}" maxlength="20" placeholder="e.g. F10Q10000001"></label>
+    <button type="submit">Search</button>
+    <a th:href="@{/candidates}">Show all</a>
+  </form>
+
+  <p class="muted" th:if="${#lists.isEmpty(candidates)}">No candidates.</p>
+  <table th:unless="${#lists.isEmpty(candidates)}">
+    <thead>
+    <tr><th>Source</th><th>Loan ID</th><th>Reporting month</th><th>Delinquency status</th><th>Source release</th><th>Rule (version)</th></tr>
+    </thead>
+    <tbody>
+    <tr th:each="c : ${candidates}">
+      <td th:text="${c.dataSource}">FRE</td>
+      <td th:text="${c.loanIdentifier}">Loan ID</td>
+      <td th:text="${#temporals.format(c.reportingMonth, 'yyyy-MM')}">2020-06</td>
+      <td th:text="${c.delinquencyStatus}">2</td>
+      <td th:text="${c.sourceReleaseId}">R47</td>
+      <td th:text="${c.ruleCode} + ' (v' + ${c.versionNo} + ')'">Rule</td>
+    </tr>
+    </tbody>
+  </table>
+  <p class="muted">Shows up to 200 rows, newest reporting month first.</p>
+</main>
+</body>
+</html>

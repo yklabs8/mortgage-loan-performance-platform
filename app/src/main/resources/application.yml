@@ -1,0 +1,11 @@
+spring:
+  application:
+    name: review-app
+  datasource:
+    url: jdbc:oracle:thin:@//${LOAN_DW_DB_HOST:localhost}:1521/FREEPDB1
+    username: ${LOAN_DW_DB_USER:loan_app}
+    password: ${LOAN_DW_DB_PASSWORD}
+    hikari:
+      connection-init-sql: alter session set current_schema = ${LOAN_DW_DB_SCHEMA:LOAN_OLTP}
+server:
+  port: 8081

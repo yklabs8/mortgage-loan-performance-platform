@@ -2,7 +2,7 @@
 
 A completed conceptual, logical, and relational design for a loan-review system: 13 tables in third normal form (3NF). The design selects review candidates from warehouse data and records their review in separate OLTP tables.
 
-Current stage: the three models and the 13-table ER diagram are complete. Table DDL, constraints, indexes, triggers, stored procedures, and the Spring Boot application will be implemented in later milestones; this repository does not yet contain runnable OLTP files.
+Current stage: the three models and the 13-table ER diagram are complete. This repository implements three core tables (`review_rule`, `review_rule_version`, and `review_candidate`), their constraints, a rule seed, the candidate-generation procedure, and a read-only Spring Boot candidate page. The other ten tables, triggers, case operations, login, and CDC remain designed for later implementation. Data Modeler models and model-generated DDL are still outstanding.
 
 ## 1. Where the business process comes from
 
@@ -13,12 +13,12 @@ This workflow is a simplified demonstration designed for this project; it is not
 
 Salesforce also documents [CaseHistory](https://developer.salesforce.com/docs/atlas.en-us.264.0.object_reference.meta/object_reference/sforce_api_objects_casehistory2.htm). These references inform the case-management pattern; they are not a specification for this application's behavior. Specific regulatory and servicer rules would need to be checked against their original texts before being added.
 
-The candidate rule in the design compares successive monthly delinquency statuses and selects loans that newly reach 60 or more days delinquent. The monthly file provides the status field; the threshold is a project design choice. Candidate selection is not implemented in this repository.
+The candidate rule in the design compares successive monthly delinquency statuses and selects loans that newly reach 60 or more days delinquent. The monthly file provides the status field; the threshold is a project design choice. Candidate selection is implemented in `review_api.generate_candidates` (`source/oltp/review_api.sql`).
 
 ## 2. Business process
 
 ```
-Design: select loans that newly reach 60+ days delinquent (review_candidate)
+Implemented: select loans that newly reach 60+ days delinquent (review_candidate)
   → a review case is opened for a candidate (risk_review_case, status OPEN)
   → a Manager assigns the case to an Analyst (case_assignment, status ASSIGNED)
   → the Analyst adds notes and the basis for a judgment (case_annotation, status IN_REVIEW)
@@ -36,6 +36,8 @@ The design has two roles: the **Analyst** reviews cases and writes notes; the **
 The diagram shows the 13 designed tables and their columns. PK = primary key, FK = foreign key, UK = unique key, `*` = mandatory (NOT NULL). Crow's-foot notation: `|` one, `o` zero (optional), `<` many. Where a table has several foreign keys to the same table, the line is labeled with the column (for example `assignee` and `assigned_by`).
 
 ## 4. Logical and relational model (13 tables)
+
+The three candidate-related tables are implemented in this version; the other ten remain part of the completed relational design.
 
 | Table | Primary key | Business unique key | Description |
 |---|---|---|---|
@@ -65,9 +67,9 @@ The diagram shows the 13 designed tables and their columns. PK = primary key, FK
 
 - It is a demonstration of a review process, not any bank's actual procedure.
 - It covers review and decision only: borrower contact and workout evaluation are out of scope.
-- Users and roles are demo data; there is no workload balancing or deadline (SLA) tracking.
+- The designed user and role data are for a later demonstration; there is no workload balancing or deadline (SLA) tracking.
 
 ## 7. Next steps
 
 - Recreate the completed Enterprise, Logical, and Relational designs in Oracle SQL Developer Data Modeler and generate DDL from those models.
-- Implement and test each table, constraint, index, trigger, and stored procedure in later milestones; reconcile the diagram with the implemented schema when those files are published.
+- Implement and test the remaining ten tables, case triggers, and case operations in later milestones; reconcile the diagram with the implemented schema when those files are published.

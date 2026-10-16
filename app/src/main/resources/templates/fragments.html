@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:fragment="head(title)">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title th:text="${title} + ' · Loan review'">Loan review</title>
+  <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<header th:fragment="nav" class="nav">
+  <a class="brand" th:href="@{/candidates}">Loan review</a>
+  <a th:href="@{/candidates}">Review candidates</a>
+</header>
+
+</body>
+</html>
