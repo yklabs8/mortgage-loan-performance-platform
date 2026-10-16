@@ -41,7 +41,7 @@ The repository is updated at each milestone and currently includes the warehouse
 | 1 | Project Proposal | Project scope and plan. | 09/19/2026 | Done |
 | 2 | Environment, Source Data, and OLTP Design | Oracle in Docker; source manifest and profiling; loaded ODS; completed conceptual, logical, and relational OLTP models in 3NF. | 10/03/2026 | Done |
 | 3 | Thin End-to-End Path | One vintage through a first warehouse fact, one metric, one Tableau chart, and one review page; OLTP models in Data Modeler, generated DDL, and core tables (Data Modeler models and DDL moved to Milestone 4). | 10/17/2026 | In progress |
-| 4 | Thicken the Databases and ETL | Full OLTP objects and tests; OLTP and warehouse models in Data Modeler with generated DDL; warehouse star schema, ETL, quality checks, reconciliation, and three analyses. | 10/31/2026 | Planned |
+| 4 | Thicken the Databases and ETL | Full OLTP objects and tests; OLTP and warehouse models in Data Modeler with generated DDL; warehouse star schema, ETL, quality checks, reconciliation, and three analyses. | 10/31/2026 | In progress |
 | 5 | Thicken the Application and Change Processing | Analyst/Manager pages, access controls, timestamp CDC, release diff, targeted backfill, and lineage. | 11/14/2026 | Planned |
 | 6 | Reports, Scale-up, and Testing | Tableau dashboards, benchmark-guided Spark processing, and end-to-end tests; stretch: full-history Spark processing on a multi-node cluster. | 11/28/2026 | Planned |
 | 7 | Final Deliverables | Final project report; presentation; demo rehearsal and recording. | 12/06/2026 | Planned |
