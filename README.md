@@ -53,6 +53,22 @@ The repository is updated at each milestone. Project status as of October 29, 20
 | 6 | Reports, Scale-up, and Testing | Core: Tableau dashboards for roll-rate, vintage, and payment-modification analysis; Phase 2 Spark scale-up on multiple vintages with benchmark; end-to-end tests. Stretch (only if earlier milestones finish early): full-history Spark run on a multi-node cluster; additional-source comparison | 11/28/2026 | In progress |
 | 7 | Final Deliverables | Final project report; presentation; demo rehearsal and recording | 12/06/2026 | Planned |
 
+## Data models
+
+Relational models from Oracle SQL Developer Data Modeler. They cover the full project schemas, including tables this version does not deploy. Enterprise and logical models and the generated DDL are in `docs/model/`.
+
+Review application (OLTP):
+
+![OLTP relational model](docs/model/oltp_relational.png)
+
+Warehouse:
+
+![Warehouse relational model](docs/model/dw_relational.png)
+
+Tableau chart of the cumulative 60+ curve by origination quarter:
+
+![Cumulative 60+ curve](docs/img/dlq60_curve.png)
+
 ## Design notes
 
 - The ODS stores source fields as text and adds `release_id` and `source_file`. Oracle stores empty strings as `NULL`, so this is not byte-for-byte preservation. Primary keys include `release_id`; versions of the same loan from different releases can coexist for later comparison.
