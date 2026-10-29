@@ -26,8 +26,8 @@ At full scale the processing runs on HDFS/Hive and Spark, and Oracle serves the 
 | Raw archive | SHA-256 manifest; downloaded archives are verified with a manual command before loading. | Done |
 | ODS layer | Loads origination and monthly files as text, tagged with release and source file; a reload replaces one file's partition as a single step. | Done |
 | Analytical star schema | Date, geography, servicer, loan, and code dimensions; release-partitioned monthly facts; per-loan summaries; eight analysis tables. | Done |
-| Data quality | Rule results and offending rows are recorded; HARD failures stop the load, bad rows can be quarantined, warnings are kept. | Done |
-| Release diff and targeted backfill | Compares two releases, finds loans whose history changed, and recomputes only those loans. | Done |
+| Data quality | Rule results and offending rows are recorded; HARD failures stop the load, invalid loan references and months can be quarantined, warnings are kept. | Done |
+| Release diff and targeted backfill | Compares two releases, finds loans whose history changed, copies unchanged loan summaries, and recomputes only the changed loans. | Done |
 | Data models | Data Modeler enterprise, logical, and relational models with generated DDL (`docs/model/`). | Done |
 | Review candidates and page | Rule-based candidate selection from the warehouse and a read-only Spring Boot candidate page. | Done |
 | Full review workflow and CDC | Analyst/Manager workflow and timestamp-based CDC back to the warehouse; the design is in `docs/oltp_design.md`. | Design done |
@@ -48,8 +48,8 @@ Each analysis is also split by nine loan attributes such as credit score and loa
 ## Engineering highlights
 
 - **Reloads are all-or-nothing.** A file is loaded into a staging table, its row count and content fingerprint are checked, and then it replaces the live partition in one step, so readers never see a half-loaded file.
-- **Releases coexist.** Every row carries its release; a corrected release is compared with the previous one and only the affected loans are recomputed.
-- **Quality gate before loading.** Bad data stops the load or is set aside row by row with a record of why; the warehouse refuses a quality result older than the latest source load.
+- **Corrections recompute only what changed.** Freddie Mac reissues the full history in each release, so a new release is loaded in full and kept beside the previous one. The two are compared loan by loan; summaries of unchanged loans are copied, and only loans whose history changed are recomputed.
+- **Quality gate before loading.** Every rule result and offending row is recorded. Problems that make a whole file suspect, such as an empty file, duplicate keys, or an unknown status code, stop the load. Defects confined to one row, such as a monthly record for an unknown loan or an invalid month, are quarantined and the rest is loaded. The warehouse load refuses a quality check older than the latest source load.
 - **Least privilege.** The web page account can only read three tables; it cannot write or run procedures.
 
 ## Data models
