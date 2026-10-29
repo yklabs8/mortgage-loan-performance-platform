@@ -4,7 +4,7 @@ Usage: .venv/bin/python -m unittest discover -s test -p "test_*.py" (from the re
 Each test uses a temporary table ods_zz_load_test (two data columns + release_id + source_file) and temporary files, dropped afterwards.
 Cases covered: empty file, missing file, wrong column count, reruns do not double rows,
 a bad value in the last batch, an invalid table name, and different files of the same release not affecting each other.
-Requires: database started; python/db.py can connect (see Setup in README for the password). Called by: run manually (see Tests in README).
+Requires: database started; python/db.py can connect (see docs/setup.md for the password). Called by: run manually (see Tests in docs/setup.md).
 """
 
 import os  # build paths

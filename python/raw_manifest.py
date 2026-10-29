@@ -11,7 +11,7 @@ verify: recompute the checksum of every listed file; exit with failure if a file
         files present in the folder but not in the manifest only produce a notice (run build for new downloads first).
 file_time in the manifest is the file modification time (local time with time zone), used as an approximation of the
 download time (the files are never modified after download).
-Requires: Python standard library only. Called by: run manually; verify before loading (see Setup in README).
+Requires: Python standard library only. Called by: run manually; verify before loading (see docs/setup.md).
 """
 
 import csv  # read and write the manifest

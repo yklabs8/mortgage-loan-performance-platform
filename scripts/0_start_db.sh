@@ -2,7 +2,7 @@
 # Name: 0_start_db.sh
 # Purpose: start the Oracle container in Docker and wait until the database is ready
 # Usage: scripts/0_start_db.sh (container name defaults to oracle-db; override with ORACLE_CONTAINER)
-# Requires: Docker Desktop running; the container already exists (see Setup in README)
+# Requires: Docker Desktop running; the container already exists (see docs/setup.md)
 # Called by: run manually before any table-creation or loading script
 set -euo pipefail  # stop immediately if any step fails
 

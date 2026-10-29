@@ -3,7 +3,7 @@
 --          the original primary keys.
 -- Usage: scripts/run_sql.sh source/ods/ods_exchange_stages.sql
 -- Requires: the four partitioned ODS tables created
--- Called by: deployment from scratch (see Setup in README)
+-- Called by: deployment from scratch (see docs/setup.md)
 
 -- The format checker cannot parse "for exchange with table" yet.
 -- noqa: disable=all
