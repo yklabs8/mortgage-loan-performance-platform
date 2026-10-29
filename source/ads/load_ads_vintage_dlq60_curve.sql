@@ -1,5 +1,5 @@
--- First warehouse path; source definitions and calculations are documented in docs/metric_definitions.md.
-
+-- load_ads_vintage_dlq60_curve.sql
+-- Load ads vintage dlq60 curve. See docs/metric_definitions.md for analytical definitions.
 create or replace procedure load_ads_vintage_dlq60_curve(
    in_release_id in varchar2
 ) is
@@ -97,7 +97,7 @@ begin
 
    if l_inserted = 0 then
       raise_application_error(
-         -20001, 'ads_vintage_dlq60_curve produced no rows: ' || in_release_id
+         -20001, 'No ads_vintage_dlq60_curve rows produced: ' || in_release_id
       );
    end if;
 end load_ads_vintage_dlq60_curve;

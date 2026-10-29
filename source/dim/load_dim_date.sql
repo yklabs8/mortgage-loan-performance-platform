@@ -1,5 +1,5 @@
--- First warehouse path; source definitions and calculations are documented in docs/metric_definitions.md.
-
+-- load_dim_date.sql
+-- Load dim date. See docs/metric_definitions.md for analytical definitions.
 merge into dim_date t
 using (
    with

@@ -169,6 +169,19 @@ def load(release_id, table, data_path):
             raise RuntimeError(
                 f"File has {rows} rows, table has {loaded}; mismatch, rolled back"
             )
+        if table in {
+            "ods_orig",
+            "ods_perf",
+            "ods_orig_pre202607",
+            "ods_perf_pre202607",
+        }:
+            cur.execute(
+                "insert into ods_load_event "
+                "(release_id, source_table, source_file) values (:r, :t, :f)",
+                r=release_id,
+                t=table,
+                f=source_file,
+            )
         conn.commit()  # commit only after every check passes
         print(
             f"{table} {release_id} {source_file}: file {rows} rows, table {loaded} rows, match"

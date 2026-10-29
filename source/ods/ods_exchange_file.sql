@@ -89,6 +89,10 @@ begin
       -- fingerprint mismatch after the exchange: the old partition data is now in the staging table, do not clear it
       raise_application_error(-20067, 'Hash mismatch after swap; keep stage');
    end if;
+   if l_table != 'ods_zz_exchange' then
+      insert into ods_load_event (release_id, source_table, source_file)
+      values (in_release_id, l_table, in_file_name);
+   end if;
    execute immediate 'truncate table ' || dbms_assert.simple_sql_name(l_stage);
    execute immediate
       'alter index ' || dbms_assert.simple_sql_name(l_stage_pk) || ' rebuild';

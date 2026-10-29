@@ -1,26 +1,33 @@
 # Mortgage Loan Performance Data Platform
 
-This project builds an end-to-end data platform from Freddie Mac loan-level data. It is designed to ingest quarterly releases, detect and handle corrections to previously published history, build an Oracle warehouse, and produce quality-checked analysis results traceable to source files. This version, while Milestone 3 is in progress, contains the raw-archive checksum tool, Oracle ODS tables and loader, the first warehouse fact path and cumulative 60+ delinquency metric, three core loan-review tables, candidate generation, and a read-only candidate page. The completed 13-table review design and remaining components are shown below.
+This project builds an end-to-end mortgage data platform from Freddie Mac loan-level data: archive verification, release-aware ETL, a layered warehouse, data-quality controls, three risk analyses, and a loan-review application. The target architecture uses HDFS/Hive and Spark for large-scale processing and Oracle for delivered analysis results and review operations. The Oracle sample warehouse published here is the development and regression reference. This update adds its full analytical star schema, external-table ETL, quality gate and quarantine, release comparison, targeted recomputation, and independent reconciliation. The existing read-only candidate application remains at its previously published scope.
 
 ## What the platform does
+
+Component status below describes this public repository. The milestone table separately records wider-project progress.
 
 | Component | What it does | Status |
 |---|---|---|
 | Raw archive | Records SHA-256 checksums in a manifest and verifies downloaded archives when the user runs the verification command; loading does not run this check automatically. | Done |
 | ODS layer | Loads origination and monthly files as text into four layout-specific Oracle tables, records release and source file, and replaces a file's partition through a checked staging table. | Done |
-| Release diff and targeted backfill | Compares releases to find revised history and recomputes affected downstream results. | Planned |
-| Data warehouse — first fact path | Provides tables and loaders for new-layout origination and monthly records through the loan and date dimensions, monthly fact, per-loan summary, and cumulative 60+ curve for one sample vintage. | Done |
-| Data warehouse — full star schema | Adds the remaining dimensions, facts, and analyses. | Planned |
-| Data quality and lineage | Checks downstream data and traces analysis results through processing steps to source files; ODS loading already checks row counts and content fingerprints. | Planned |
-| Large-scale processing | Uses Spark for larger volumes if benchmarks show it is needed. | Planned |
+| Release diff and targeted backfill | Compares normalized releases, identifies changed analytical inputs, copies unaffected summaries, and recomputes affected loans. | Done |
+| Data warehouse — analytical star schema | Date, geography, servicer, loan and code dimensions; release-partitioned monthly facts; two loan summaries; eight analytical ADS tables. | Done |
+| Data quality | Records rule results and offending rows; HARD failures stop processing, complete quarantine permits eligible row-level exclusions, and WARN results remain recorded. The load gate rejects checks older than the latest successful source load. | Done |
+| Calculation lineage and review history | Completed design for calculation/input lineage and Type 2 review-rule/user history; these modules are outside this published sample path. | Design done |
+| Large-scale processing | The Spark/Hive processing and delivery design is complete; large-scale implementation and tests exist in the wider project but are not included in this publication. | Design done |
 | Loan-review application — candidate path | Three core OLTP tables, a versioned 60+ entry rule, a procedure that selects candidates from the warehouse, and a read-only Spring Boot candidate page. | Done |
-| Loan-review application — full workflow | The completed 13-table, third-normal-form OLTP design describes an Analyst/Manager case workflow and timestamp-based CDC into the warehouse; the remaining implementation is scheduled for later milestones. | Design done |
+| Loan-review application — full workflow | The wider project implements the Analyst/Manager workflow and timestamp-based CDC. This publication retains its completed 13-table design; full-workflow source is deferred from this update. | Design done |
+| Data models | Oracle SQL Developer Data Modeler enterprise, logical, and relational models of the OLTP schema and the warehouse, with model-generated DDL (`docs/model/`). The models cover the full project schemas, including tables this version does not deploy. | Done |
 | Dashboards — first chart | One Tableau chart of the cumulative 60+ curve by origination quarter (`docs/img/dlq60_curve.png`). | Done |
 | Dashboards — full set | Tableau dashboards for all three analyses. | Planned |
 
 ## What this version can run
 
-You can create or verify an archive manifest, inspect a downloaded sample, deploy and load the ODS, and run its database-backed tests. This release includes commands to deploy the first warehouse path, load one new-layout sample year through DIM, DWD, DWS, and ADS, and independently reconcile the cumulative 60+ curve against the raw files. It also includes three runnable OLTP tables, a candidate-generation package, and a read-only page that lists up to 200 candidates and filters by loan ID. The page does not generate candidates or open cases; run candidate generation as the OLTP owner. The full 13-table design and ER diagram are in `docs/oltp_design.md`. The Tableau chart in `docs/img/dlq60_curve.png` was built from the curve table of the R47 sample vintages loaded in the project's development warehouse; the export step and workbook are not part of this release. Data Modeler models and model-generated DDL, the remaining Tableau dashboards, Spark jobs, the full warehouse, case workflow, CDC, and the other two analyses are still outstanding. The OLTP and page steps below were run in new database accounts on October 16, 2026: generating candidates for one month produced the same loans as an independent SQL count, a rerun added none, the page listed and filtered them, and the page account could not modify the tables.
+You can verify downloaded archives, deploy and load either supported Freddie file layout into Oracle, run source quality checks, load the analytical star schema, calculate all three analyses, compare releases, and recompute affected summaries. For the newer layout, separate Python implementations reconcile the vintage curve, transitions, modifications, and segmented analyses against raw files. External-table loading supports the newer layout; the Python loader supports both.
+
+The candidate application still contains three core OLTP tables, candidate generation, and a read-only Spring Boot page listing up to 200 candidates with a bound loan-ID filter. It cannot open or decide cases. Its previously tested scope and the completed 13-table design remain in `docs/oltp_design.md`. The Tableau image `docs/img/dlq60_curve.png` is from the development warehouse; a workbook and the other dashboards are not included.
+
+Review workflow/CDC, calculation lineage, Spark jobs, delivery publishing, and scheduling are not distributed here. Project milestone status below includes work completed beyond this public subset. This version was deployed into a new, empty database schema: setup steps 2–9 and the database tests passed.
 
 ## Questions it answers
 
@@ -30,21 +37,21 @@ The platform is designed to answer three questions:
 2. What outcomes follow a payment modification?
 3. How does performance differ by origination year (vintage)?
 
-This version calculates one cumulative 60+ delinquency rate by origination quarter and months on book for question 3; aggregate the four quarters’ numerators and denominators to compare origination years. Questions 1 and 2 remain for later milestones.
+This version calculates month-to-month delinquency transitions, cumulative 60+ curves by origination quarter and MOB, and 12-month outcomes after first modification. Each analysis also has separate groups for nine loan attributes; additional outputs cover final outcomes, cures, and relapse after cure. Aggregate counts before dividing: never average subgroup rates. See `docs/metric_definitions.md`.
 
 ## Status
 
-The repository is updated at each milestone and currently includes the warehouse and candidate-page portions of Milestone 3 while the milestone remains in progress. The schedule below records project status as of October 16, 2026; planned dates may change.
+The repository is updated at each milestone. Project status as of October 29, 2026: Milestones 1–4 are Done; Milestones 5–6 are In progress. Dates are targets and may change. Milestone status describes the wider project, while the runnable public subset is listed above.
 
 | # | Milestone | Main deliverables | Target date | Status |
 |---|---|---|---|---|
-| 1 | Project Proposal | Project scope and plan. | 09/19/2026 | Done |
-| 2 | Environment, Source Data, and OLTP Design | Oracle in Docker; source manifest and profiling; loaded ODS; completed conceptual, logical, and relational OLTP models in 3NF. | 10/03/2026 | Done |
-| 3 | Thin End-to-End Path | One vintage through a first warehouse fact, one metric, one Tableau chart, and one review page; OLTP models in Data Modeler, generated DDL, and core tables (Data Modeler models and DDL moved to Milestone 4). | 10/17/2026 | In progress |
-| 4 | Thicken the Databases and ETL | Full OLTP objects and tests; OLTP and warehouse models in Data Modeler with generated DDL; warehouse star schema, ETL, quality checks, reconciliation, and three analyses. | 10/31/2026 | In progress |
-| 5 | Thicken the Application and Change Processing | Analyst/Manager pages, access controls, timestamp CDC, release diff, targeted backfill, and lineage. | 11/14/2026 | Planned |
-| 6 | Reports, Scale-up, and Testing | Tableau dashboards, benchmark-guided Spark processing, and end-to-end tests; stretch: full-history Spark processing on a multi-node cluster. | 11/28/2026 | Planned |
-| 7 | Final Deliverables | Final project report; presentation; demo rehearsal and recording. | 12/06/2026 | Planned |
+| 1 | Project Proposal | Proposal submitted | 09/19/2026 | Done |
+| 2 | Environment, Source Data, and OLTP Design | Oracle in Docker; source data with checksum manifest; data profiling; ODS loaded; OLTP conceptual, logical, and relational design (3NF) | 10/03/2026 | Done |
+| 3 | Thin End-to-End Path | One vintage through every layer: ODS → first fact table with DIM_DATE → one delinquency metric → one Tableau chart; OLTP models in Data Modeler, DDL, core tables; review candidates from the warehouse shown on one web page (Data Modeler models and DDL moved to Milestone 4) | 10/17/2026 | Done |
+| 4 | Thicken the Databases and ETL | OLTP: all tables, indexes, triggers, functions, procedures, sample data, constraint and trigger tests, rule-mapping additions, Data Modeler models and DDL. Warehouse: full star schema with DIM_DATE, Enterprise / Logical / Relational models and DDL; ETL with external tables and PL/SQL; data quality rules and reconciliation; all three analyses | 10/31/2026 | Done |
+| 5 | Thicken the Application and Change Processing | Analyst and Manager pages with menus; role-based grants and password management; validation, confirmations, SQL-injection and XSS protection; timestamp-based CDC from OLTP to the warehouse; release-diff and targeted backfill test case; lineage | 11/14/2026 | In progress |
+| 6 | Reports, Scale-up, and Testing | Core: Tableau dashboards for roll-rate, vintage, and payment-modification analysis; Phase 2 Spark scale-up on multiple vintages with benchmark; end-to-end tests. Stretch (only if earlier milestones finish early): full-history Spark run on a multi-node cluster; additional-source comparison | 11/28/2026 | In progress |
+| 7 | Final Deliverables | Final project report; presentation; demo rehearsal and recording | 12/06/2026 | Planned |
 
 ## Design notes
 
@@ -63,19 +70,21 @@ The provided manifest records six archives used in this project, including earli
 ## Repository layout
 
 ```text
-scripts/       Start an existing Oracle container, create a database user, deploy ODS, run SQL
-python/        Database connection, raw-file manifest, optional sample profiler, ODS loader, curve reconciliation
-source/ods/    Four ODS tables, staging tables, partition-exchange procedure, statistics
-source/dim/    Date, loan, and delinquency-status dimensions and loaders
-source/dwd/    Monthly fact, exchange stage, release load, and statistics
-source/dws/    One-row-per-loan performance summary and loader
-source/ads/    Cumulative 60+ curve and loader
-source/oltp/   Three candidate-related tables, rule seed, and generation package
-source/ops/    Fact-table and candidate-page grants
-app/           Read-only Spring Boot candidate page
-checks/        ODS content fingerprint function; post-deployment invalid-object check
-test/          Database-backed loader tests
-docs/          Example raw manifest, completed OLTP design and ER diagram
+scripts/       Oracle setup, ODS deployment, warehouse loads, external-table loading
+python/        Database access, archive checks, loaders, independent raw-file reconciliation
+source/ods/    Four source tables, stages, exchange procedure, load-event ledger, external tables
+source/dim/    Date, loan, durable keys, geography, servicer, status/code dimensions, segment view
+source/dwd/    Partitioned monthly fact, exchange stage, release loading, targeted recomputation
+source/dws/    Per-loan performance and modification summaries
+source/ads/    Three analyses, five segmented outputs, release-difference tables and procedures
+source/rpt/    Read-only views for the three core analyses
+source/oltp/   Previously published three-table candidate path
+source/ops/    Previously published candidate-path grants
+app/           Previously published read-only candidate page
+checks/        Source/detail quality, issue/quarantine records, freshness gate, object checks
+test/          Database-backed source-loader tests
+docs/          Metric definitions, source-field map, review design, example manifest, images
+docs/model/    Data Modeler enterprise, logical, and relational diagrams and model-generated DDL
 ```
 
 ## Setup and load one sample
@@ -144,35 +153,86 @@ Run these commands from the repository root in a bash shell. This walkthrough as
 
 The loader checks the number of rows in its staging table and compares fingerprints before and after partition exchange. These are database-side checks; the raw ZIP's SHA-256 check is the separate manifest step. Oracle stores empty strings as `NULL`, so “raw text” does not mean byte-for-byte preservation of the source file.
 
-8. For a July 2026 or later layout, deploy the first warehouse path in a fresh `loan_dw` schema. The date and status loaders are rerunnable; create each table and procedure only once. Check compilation after deploying the procedures.
+8. Deploy the complete sample warehouse into a **fresh** `loan_dw` schema after ODS setup. Do not apply these CREATE TABLE statements over an existing installation. The order below creates referenced objects before compiling the loaders. Date, geography, and code seed loaders run as scripts; the loan and servicer loaders create procedures.
 
    ```bash
    scripts/run_sql.sh source/dim/dim_date.sql
-   scripts/run_sql.sh source/dim/load_dim_date.sql
-   scripts/run_sql.sh source/dim/dim_loan.sql
+   scripts/run_sql.sh source/dim/dim_geography.sql
+   scripts/run_sql.sh source/dim/dim_servicer.sql
+   scripts/run_sql.sh source/dim/dim_loan_key_map.sql
    scripts/run_sql.sh source/dim/dim_delinquency_status.sql
-   scripts/run_sql.sh source/dim/load_dim_delinquency_status.sql
+   scripts/run_sql.sh source/dim/dim_zero_balance_code.sql
+   scripts/run_sql.sh source/dim/dim_loan.sql
+   scripts/run_sql.sh source/dim/v_loan_segment.sql
    scripts/run_sql.sh source/dwd/dwd_loan_monthly_perf.sql
    scripts/run_sql.sh source/dwd/dwd_loan_monthly_perf_stage.sql
+   scripts/run_sql.sh source/dwd/dw_recompute_loan.sql
    scripts/run_sql.sh source/dws/dws_perf_loan_td.sql
+   scripts/run_sql.sh source/dws/dws_mod_loan_td.sql
    scripts/run_sql.sh source/ads/ads_vintage_dlq60_curve.sql
+   scripts/run_sql.sh source/ads/ads_dlq_transition_monthly.sql
+   scripts/run_sql.sh source/ads/ads_modification_outcome.sql
+   scripts/run_sql.sh source/ads/ads_dlq_transition_segment.sql
+   scripts/run_sql.sh source/ads/ads_final_outcome_segment.sql
+   scripts/run_sql.sh source/ads/ads_cure_redefault_segment.sql
+   scripts/run_sql.sh source/ads/ads_vintage_dlq60_segment.sql
+   scripts/run_sql.sh source/ads/ads_modification_segment.sql
+   scripts/run_sql.sh source/ads/ads_release_diff.sql
+   scripts/run_sql.sh checks/dq_check_result.sql
+   scripts/run_sql.sh checks/dq_issue.sql
+   scripts/run_sql.sh checks/dq_ods_ready.sql
+   scripts/run_sql.sh source/dim/load_dim_date.sql
+   scripts/run_sql.sh source/dim/load_dim_geography.sql
+   scripts/run_sql.sh source/dim/load_dim_delinquency_status.sql
+   scripts/run_sql.sh source/dim/load_dim_zero_balance_code.sql
    scripts/run_sql.sh source/dim/load_dim_loan.sql
+   scripts/run_sql.sh source/dim/load_dim_servicer.sql
    scripts/run_sql.sh source/dwd/load_dwd_loan_monthly_perf.sql
    scripts/run_sql.sh source/dws/load_dws_perf_loan_td.sql
+   scripts/run_sql.sh source/dws/load_dws_mod_loan_td.sql
    scripts/run_sql.sh source/ads/load_ads_vintage_dlq60_curve.sql
+   scripts/run_sql.sh source/ads/load_ads_dlq_transition_monthly.sql
+   scripts/run_sql.sh source/ads/load_ads_modification_outcome.sql
+   scripts/run_sql.sh source/ads/load_ads_dlq_transition_segment.sql
+   scripts/run_sql.sh source/ads/load_ads_final_outcome_segment.sql
+   scripts/run_sql.sh source/ads/load_ads_cure_redefault_segment.sql
+   scripts/run_sql.sh source/ads/load_ads_vintage_dlq60_segment.sql
+   scripts/run_sql.sh source/ads/load_ads_modification_segment.sql
+   scripts/run_sql.sh source/ads/compare_dim_loan.sql
+   scripts/run_sql.sh source/ads/compare_dwd_loan_monthly_perf.sql
+   scripts/run_sql.sh source/ads/compare_releases.sql
+   scripts/run_sql.sh source/dwd/find_recompute_loans.sql
+   scripts/run_sql.sh source/dwd/recompute_downstream_targeted.sql
    scripts/run_sql.sh source/dwd/gather_dw_stats.sql
    scripts/run_sql.sh source/dwd/load_dw_release.sql
+   scripts/run_sql.sh source/rpt/rpt_views.sql
    scripts/run_sql.sh checks/check_invalid_objects.sql
    ```
 
-9. Load that release through the warehouse, then compare the curve against the same raw files. Use the two official File Headers matching the new-layout archive; substitute their actual paths below. The reconciliation prints rates for selected MOBs and fails if any quarter/month differs.
+9. Check the loaded ODS release, then load the warehouse. HARD failures stop processing. Invalid loan references and invalid months may be excluded only after full row-level quarantine has been recorded. A later successful source reload invalidates the prior gate, so rerun `dq_ods.sql` after reloading.
 
    ```bash
+   scripts/run_sql.sh checks/dq_ods.sql "release_id=$RELEASE"
    scripts/2_load_dw_release.sh "$RELEASE"
+   ```
+
+   The warehouse loader validates and exchanges the release fact partition before recomputing summaries. If summary processing fails after exchange, the detail is already new: investigate and rerun. This sample path does not provide the separate all-table delivery-pointer publication used by the wider platform.
+
+   For a newer-layout sample, independently reconcile every result with the same raw files and matching official headers. The segmented check also needs the two official Census reference files named in `source/dim/load_dim_geography.sql`; put them in `CENSUS_DIR`.
+
+   ```bash
    ORIG_HEADER=/path/to/origination_data_file_header.txt
    PERF_HEADER=/path/to/performance_data_file_header.txt
+   CENSUS_DIR=/path/to/census_reference_files
    .venv/bin/python python/reconcile_dlq60_curve.py "$RELEASE" "$EXTRACT_DIR/sample_orig_$YEAR.txt" "$ORIG_HEADER" "$EXTRACT_DIR/sample_perf_$YEAR.txt" "$PERF_HEADER"
+   .venv/bin/python python/reconcile_transition.py "$RELEASE" "$EXTRACT_DIR/sample_perf_$YEAR.txt" "$PERF_HEADER"
+   .venv/bin/python python/reconcile_modification.py "$RELEASE" "$EXTRACT_DIR/sample_perf_$YEAR.txt" "$PERF_HEADER"
+   .venv/bin/python python/reconcile_segment.py "$RELEASE" "$EXTRACT_DIR/sample_orig_$YEAR.txt" "$ORIG_HEADER" "$EXTRACT_DIR/sample_perf_$YEAR.txt" "$PERF_HEADER" "$CENSUS_DIR"
    ```
+
+   Optional newer-layout external-table loading: run `scripts/3_create_ext_dir.sh` as an administrator to create the directory grant, then deploy `source/ods/ext_ods_tables.sql` and `source/ods/load_ods_from_ext.sql` through `scripts/run_sql.sh`. Run `checks/check_invalid_objects.sql` afterward. `scripts/4_load_ods_ext.sh "$RELEASE" ods_perf "$EXTRACT_DIR/sample_perf_$YEAR.txt" --compare` replaces that file and checks its fingerprint against the existing Python load. Rerun the quality check afterward.
+
+   For release comparison, fully load both releases first, then run `scripts/run_sql.sh source/ads/run_compare_releases.sql old_release=OLD new_release=NEW`. To load a corrected release using a baseline, run `scripts/2_load_dw_release.sh NEW OLD`. Unchanged loan summaries are copied; affected loans are recomputed. Without a baseline the loader recomputes everything. `python/reconcile_loan_bands.py` is an additional check expecting all three releases R45, R46, and R47.
 
 10. Create separate OLTP and page accounts, then deploy the core tables and package. Save passwords in the local password store before running the account scripts. The warehouse owner grants the OLTP owner direct SELECT on the monthly fact; the package needs this direct grant to compile. Deploy the tables and seed as `loan_oltp`, then compile and check the package.
 
@@ -208,7 +268,7 @@ The loader checks the number of rows in its staging table and compares fingerpri
     scripts/12_run_app.sh
     ```
 
-Open `http://localhost:8081/candidates`. The page account has SELECT on only the three core OLTP tables; it has no table-write or package-execute grant. The full workflow retains its completed design but is not yet implemented here. The warehouse path currently processes the newer layout only. It does not run the later quality gate, quarantine, lineage, targeted recomputation, or full set of analyses. The Data Modeler models and generated DDL, moved to Milestone 4, are still needed to complete Milestone 3.
+Open `http://localhost:8081/candidates`. The page account has SELECT on only the three core OLTP tables, with no table-write or package-execute grant. The full review workflow remains outside this published version. The Data Modeler models and generated DDL for the full schemas are in `docs/model/`.
 
 ## Tests
 

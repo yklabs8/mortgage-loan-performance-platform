@@ -1,12 +1,23 @@
--- Summarize the first 60+ month for every loan, including loans with no monthly row yet.
+-- load_dws_perf_loan_td.sql
+-- Load dws perf loan td. See docs/metric_definitions.md for analytical definitions.
 create or replace procedure load_dws_perf_loan_td(
    in_release_id in varchar2
+   , in_only_listed in varchar2 default 'N'
 ) is
    l_dim_rows pls_integer;
    l_release_rows pls_integer;
 begin
    delete from dws_perf_loan_td
-   where release_id = in_release_id;
+   where
+      release_id = in_release_id
+      and (
+         in_only_listed = 'N'
+         or loan_identifier in (
+            select loan_identifier
+            from dw_recompute_loan
+            where release_id = in_release_id
+         )
+      );
 
    insert into dws_perf_loan_td (
       loan_identifier
@@ -17,22 +28,58 @@ begin
       , last_reporting_period
       , first_dlq60_period
       , first_dlq60_mob
+      , zero_balance_code
+      , zero_balance_effective_date
       , release_id
    )
    with
-   dwd as (
+
+   scope_listed as (
+      select loan_identifier
+      from dw_recompute_loan
+      where
+         release_id = in_release_id
+         and change_kind != 'REMOVED'
+         and in_only_listed = 'Y'
+   )
+
+   , scope as (
+      select loan_identifier
+      from dim_loan
+      where release_id = in_release_id and in_only_listed = 'N'
+      union all
+      select loan_identifier
+      from scope_listed
+   )
+
+   , dwd as (
       select
          loan_identifier
          , monthly_reporting_period
          , current_loan_delinquency_status
+         , zero_balance_code
+         , zero_balance_effective_date
       from dwd_loan_monthly_perf
-      where release_id = in_release_id
+      where release_id = in_release_id and in_only_listed = 'N'
+      union all
+      select
+         w.loan_identifier
+         , w.monthly_reporting_period
+         , w.current_loan_delinquency_status
+         , w.zero_balance_code
+         , w.zero_balance_effective_date
+      from dwd_loan_monthly_perf w
+      inner join scope_listed sl
+         on w.loan_identifier = sl.loan_identifier
+      where w.release_id = in_release_id  -- noqa: RF02,RF03
    )
 
    , perf as (
       select
          w.loan_identifier
          , w.monthly_reporting_period
+         , w.zero_balance_code
+         , w.zero_balance_effective_date
          , case when s.is_dlq60 = 'Y' then 1 else 0 end as is_dlq60
       from dwd w
       left join dim_delinquency_status s
@@ -59,7 +106,21 @@ begin
          , first_payment_date
          , release_id
       from dim_loan
-      where release_id = in_release_id
+      where
+         release_id = in_release_id
+         and loan_identifier in (select sc.loan_identifier from scope sc)
+   )
+
+   , zero_balance as (
+      select
+         loan_identifier
+         , zero_balance_code
+         , zero_balance_effective_date
+         , row_number() over (
+            partition by loan_identifier order by monthly_reporting_period desc
+         ) as rn
+      from perf
+      where zero_balance_code is not null
    )
 
    select
@@ -72,10 +133,16 @@ begin
       , b.first_dlq60_period
       , months_between(b.first_dlq60_period, d.first_payment_date)
       + 1 as first_dlq60_mob
+      , z.zero_balance_code
+      , z.zero_balance_effective_date
       , d.release_id
    from dim d
    left join by_loan b
-      on d.loan_identifier = b.loan_identifier;
+      on d.loan_identifier = b.loan_identifier
+   left join zero_balance z
+      on
+         d.loan_identifier = z.loan_identifier
+         and z.rn = 1;
 
    select count(*)
    into l_dim_rows
