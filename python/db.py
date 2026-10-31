@@ -1,4 +1,4 @@
-"""Connect to the project's Oracle database (FREEPDB1).
+"""Connect to the platform's Oracle database (FREEPDB1).
 
 Password source: only a private file outside the repository. Stop if an account has no saved password.
 Requires: python-oracledb. Called by: scripts in python/ that need the database.

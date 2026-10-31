@@ -3,7 +3,7 @@
 # Purpose: create the four partitioned ODS tables, their exchange staging tables, the fingerprint
 #          function ods_file_hash, successful-load event ledger, and the partition-exchange procedure ods_exchange_file
 # Usage: scripts/2_create_ods.sh (run from the repository root)
-# Requires: database started (0_start_db.sh); project user created (1_create_db_user.sh); password available as in step 3 of docs/setup.md
+# Requires: database started (0_start_db.sh); platform database user created (1_create_db_user.sh); password available as in step 3 of docs/setup.md
 # Called by: run manually, once, when deploying from scratch
 set -euo pipefail  # stop immediately if any step fails
 

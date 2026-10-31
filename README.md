@@ -35,7 +35,7 @@ At full scale the processing runs on HDFS/Hive and Spark, and Oracle serves the 
 | Dashboards — first chart | Cumulative 60+ curve by origination quarter (below). | Done |
 | Dashboards — full set | Tableau dashboards for all three analyses. | Planned |
 
-Components marked Done are in this repository. Those marked Design done are implemented in the wider project and not published here yet.
+Components marked Done are in this repository. Those marked Design done are implemented in the full platform and not published here yet.
 
 ## Analyses
 
@@ -68,7 +68,7 @@ Cumulative 60+ delinquency by origination quarter (Tableau):
 
 ## Status
 
-Updated at each milestone. As of October 29, 2026, Milestones 1–4 are Done and Milestones 5–6 are In progress. Milestone status covers the whole project, including work not yet published here.
+Updated at each milestone. As of October 29, 2026, Milestones 1–4 are Done and Milestones 5–6 are In progress. Milestone status covers the full platform, including work not yet published here.
 
 | # | Milestone | Main deliverables | Target date | Status |
 |---|---|---|---|---|

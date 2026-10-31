@@ -16,6 +16,6 @@ create table dim_servicer (
 comment on table dim_servicer is 'DIM: one row per raw servicer-name spelling. Key 0 means not provided. Names are disclosed when the quarterly share is at least 1%; otherwise OTHER (User Guide p.15). SCD Type 1 overwrites standardized names without retaining history.';
 comment on column dim_servicer.servicer_key is 'Surrogate key assigned on first appearance; stable thereafter. 0 means not provided.';
 comment on column dim_servicer.servicer_name is 'Raw source name, matching the monthly fact; the unknown row uses (NOT PROVIDED)';
-comment on column dim_servicer.servicer_std_name is 'Project normalization: uppercase, replace ampersands with AND, remove periods, replace other punctuation with spaces, and collapse spaces. Merges spelling differences only; renames and acquisitions require a maintained mapping.';
+comment on column dim_servicer.servicer_std_name is 'Internal normalization rule (design choice): uppercase, replace ampersands with AND, remove periods, replace other punctuation with spaces, and collapse spaces. Merges spelling differences only; renames and acquisitions require a maintained mapping.';
 comment on column dim_servicer.name_status is 'NAMED = disclosed name; OTHER = servicers below the 1% threshold; NOT_PROVIDED = absent source name';
 -- noqa: enable=LT05

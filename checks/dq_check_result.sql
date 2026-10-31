@@ -60,7 +60,7 @@ comment on column dq_run.run_id is 'Run ID; increasing values identify newer run
 comment on column dq_run.release_id is 'Release checked';
 comment on column dq_run.check_scope is 'ODS = source-layer checks; DW = detail, summary, and analysis checks';
 comment on column dq_run.started_at is 'Start time';
-comment on table dq_check_result is 'Data-quality results: one row per run and rule; history is retained. DWD/DWS/ADS-prefixed rules are project additions.';
+comment on table dq_check_result is 'Data-quality results: one row per run and rule; history is retained. DWD/DWS/ADS-prefixed rules are internal additions, not official rules.';
 comment on column dq_check_result.run_id is 'Parent dq_run ID';
 comment on column dq_check_result.release_id is 'Data release, e.g. R47';
 comment on column dq_check_result.dw_layer is 'Checked layer: ODS / DWD / DWS / ADS; dw_layer avoids an Oracle reserved word';

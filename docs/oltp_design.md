@@ -6,14 +6,14 @@ Current stage: the three models and the 13-table ER diagram are complete. This r
 
 ## 1. Where the business process comes from
 
-This workflow is a simplified demonstration designed for this project; it is not a bank operating procedure. Its design uses two patterns:
+This workflow is a simplified demonstration designed for this platform; it is not a bank operating procedure. Its design uses two patterns:
 
 - **Case management:** Salesforce's official object reference includes [Case](https://developer.salesforce.com/docs/atlas.en-us.api.meta/api/sforce_api_objects_case.htm), CaseComment, CaseHistory, and CaseStatus. They provide a reference pattern for this design's case, annotation, status-history, and status tables; the schema and workflow here are independently designed.
-- **Four-eyes / maker-checker:** one person prepares a transaction and another independently approves it, a common authorization pattern in financial systems, including credit approval ([maker-checker](https://en.wikipedia.org/wiki/Maker-checker), [four-eyes principle](https://openriskmanual.org/wiki/Four_Eyes_Principle)). Here an Analyst records the review and a Manager makes the decision. This is a simplified project role split, not a claim about a particular institution's policy.
+- **Four-eyes / maker-checker:** one person prepares a transaction and another independently approves it, a common authorization pattern in financial systems, including credit approval ([maker-checker](https://en.wikipedia.org/wiki/Maker-checker), [four-eyes principle](https://openriskmanual.org/wiki/Four_Eyes_Principle)). Here an Analyst records the review and a Manager makes the decision. This is a simplified internal role split, not a claim about a particular institution's policy.
 
 Salesforce also documents [CaseHistory](https://developer.salesforce.com/docs/atlas.en-us.264.0.object_reference.meta/object_reference/sforce_api_objects_casehistory2.htm). These references inform the case-management pattern; they are not a specification for this application's behavior. Specific regulatory and servicer rules would need to be checked against their original texts before being added.
 
-The candidate rule in the design compares successive monthly delinquency statuses and selects loans that newly reach 60 or more days delinquent. The monthly file provides the status field; the threshold is a project design choice. Candidate selection is implemented in `review_api.generate_candidates` (`source/oltp/review_api.sql`).
+The candidate rule in the design compares successive monthly delinquency statuses and selects loans that newly reach 60 or more days delinquent. The monthly file provides the status field; the threshold is an internal business rule, not an official rule. Candidate selection is implemented in `review_api.generate_candidates` (`source/oltp/review_api.sql`).
 
 ## 2. Business process
 

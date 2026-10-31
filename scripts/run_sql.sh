@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Name: run_sql.sh
-# Purpose: run one SQL file as the project user on the Oracle database (FREEPDB1) in Docker
+# Purpose: run one SQL file as the platform's database user on the Oracle database (FREEPDB1) in Docker
 # Usage: scripts/run_sql.sh <SQL file> [name=value ...]
 #        for example scripts/run_sql.sh source/ods/ods_orig.sql
 #        each "name=value" becomes a sqlplus substitution variable, referenced as &name in the SQL file

@@ -53,9 +53,9 @@ partition by list (release_id, source_file) (
 -- noqa: enable=all
 
 -- The table and column comments below spell out the official name, column position, type and maximum length,
--- so their lines exceed 80 characters; line length is not checked in this block (project convention)
+-- so their lines exceed 80 characters; line length is not checked in this block (internal convention)
 -- noqa: disable=LT05
-comment on table ods_perf is 'ODS: the Freddie monthly performance file (sample_perf_YYYY.txt / perf_YYYYQn.txt) landed as-is. One row per loan per month per release; primary key release_id + loan_identifier + monthly_reporting_period. All values stored as text, unchanged. Columns 1–35 follow the order of the File Layout (July 2026); the last two columns, release_id and source_file, are added by this project.';
+comment on table ods_perf is 'ODS: the Freddie monthly performance file (sample_perf_YYYY.txt / perf_YYYYQn.txt) landed as-is. One row per loan per month per release; primary key release_id + loan_identifier + monthly_reporting_period. All values stored as text, unchanged. Columns 1–35 follow the order of the File Layout (July 2026); the last two columns, release_id and source_file, are added by the ODS layer.';
 
 comment on column ods_perf.loan_identifier is 'Loan Identifier | File Layout (July 2026) column 1 | Alpha Numeric - PYYQnXXXXXXX, max length 12';
 comment on column ods_perf.monthly_reporting_period is 'Period | File Layout (July 2026) column 2 | Date, max length 6; the official header name is PERIOD, but period is an Oracle keyword, so the name Monthly Reporting Period from the old File Layout and the User Guide is used';
@@ -92,6 +92,6 @@ comment on column ods_perf.current_interest_bearing_upb is 'Current Interest Bea
 comment on column ods_perf.mortgage_insurance_cancellation_indicator is 'Mortgage Insurance Cancellation Indicator | File Layout (July 2026) column 33 | Alpha, max length 1';
 comment on column ods_perf.servicer_name is 'Servicer Name | File Layout (July 2026) column 34 | Alpha Numeric, max length 60';
 comment on column ods_perf.bankruptcy_cramdown_costs is 'Bankruptcy Cramdown Costs | File Layout (July 2026) column 35 | Numeric - 12,2, max length 12';
-comment on column ods_perf.release_id is 'Freddie data release, e.g. R47 (column added by this project; length 10 is a project convention, enough for such codes)';
-comment on column ods_perf.source_file is 'Source file name; within a release, data is replaced file by file; traceable (column added by this project)';
+comment on column ods_perf.release_id is 'Freddie data release, e.g. R47 (column added by the ODS layer; length 10 is a design choice, enough for such codes)';
+comment on column ods_perf.source_file is 'Source file name; within a release, data is replaced file by file; traceable (column added by the ODS layer)';
 -- noqa: enable=LT05

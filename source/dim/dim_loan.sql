@@ -77,7 +77,7 @@ create table dim_loan (
 -- noqa: disable=LT05
 comment on table dim_loan is 'DIM: one loan per release. Surrogate primary key loan_key; unique release_id plus loan_identifier. Origination attributes are converted from ods_orig or ods_orig_pre202607; source codes and special unavailable values are retained. Release differences represent source corrections rather than SCD Type 2 business changes.';
 comment on column dim_loan.classic_fico is 'Classic FICO® | Source: ods_orig.classic_fico (File Layout July 2026 column 1, Numeric) | Convert text to NUMBER without a precision restriction to avoid silent rounding';
-comment on column dim_loan.fico_band is 'Credit-score band, project convention; 9999 and NULL become UNKNOWN. Computed from classic_fico.';
+comment on column dim_loan.fico_band is 'Credit-score band, internal analysis definition (not an official rule); 9999 and NULL become UNKNOWN. Computed from classic_fico.';
 comment on column dim_loan.first_payment_date is 'First Payment Date | Source: ods_orig.first_payment_date (File Layout July 2026 column 2, Date) | Convert YYYYMM to the first day of that month';
 comment on column dim_loan.first_time_homebuyer_indicator is 'First Time Homebuyer Indicator | Source: ods_orig.first_time_homebuyer_indicator (File Layout July 2026 column 3, Alpha) | Retain source text';
 comment on column dim_loan.maturity_date is 'Maturity Date | Source: ods_orig.maturity_date (File Layout July 2026 column 4, Date) | Convert YYYYMM to the first day of that month';
@@ -89,7 +89,7 @@ comment on column dim_loan.original_combined_loan_to_value_cltv is 'Original Com
 comment on column dim_loan.original_debt_to_income_dti_ratio is 'Original Debt-to-Income (DTI) Ratio | Source: ods_orig.original_debt_to_income_dti_ratio (File Layout July 2026 column 10, Numeric) | Convert text to NUMBER without a precision restriction to avoid silent rounding';
 comment on column dim_loan.original_upb is 'Original UPB | Source: ods_orig.original_upb (File Layout July 2026 column 11, Numeric) | Convert text to NUMBER without a precision restriction to avoid silent rounding';
 comment on column dim_loan.original_loan_to_value_ltv is 'Original Loan-to-Value (LTV) | Source: ods_orig.original_loan_to_value_ltv (File Layout July 2026 column 12, Numeric) | Convert text to NUMBER without a precision restriction to avoid silent rounding';
-comment on column dim_loan.ltv_band is 'Original LTV band, project convention; 999 and NULL become UNKNOWN. Computed from original_loan_to_value_ltv.';
+comment on column dim_loan.ltv_band is 'Original LTV band, internal analysis definition (not an official rule); 999 and NULL become UNKNOWN. Computed from original_loan_to_value_ltv.';
 comment on column dim_loan.original_interest_rate is 'Original Interest Rate | Source: ods_orig.original_interest_rate (File Layout July 2026 column 13, Numeric - 6,3) | Convert text to NUMBER without a precision restriction to avoid silent rounding';
 comment on column dim_loan.channel is 'Channel | Source: ods_orig.channel (File Layout July 2026 column 14, Alpha) | Retain source text';
 comment on column dim_loan.prepayment_penalty_indicator is 'Prepayment Penalty Indicator | Source: ods_orig.prepayment_penalty_indicator (File Layout July 2026 column 15, Alpha) | Retain source text';
@@ -112,7 +112,7 @@ comment on column dim_loan.vantagescore_4_0 is 'VantageScore® 4.0 | Source: ods
 comment on column dim_loan.origination_year is 'Origination year from YY in PYYQn (User Guide p.7). Data starts in 1999 (p.16): 99 maps to 1999; other values map to 20YY.';
 comment on column dim_loan.origination_quarter is 'Origination quarter from n in PYYQn (User Guide p.7)';
 comment on column dim_loan.release_id is 'Source data release, e.g. R47';
-comment on column dim_loan.data_source is 'Source agency: FRE = Freddie Mac; project-added column';
+comment on column dim_loan.data_source is 'Source agency: FRE = Freddie Mac; column added by the warehouse';
 comment on column dim_loan.loan_key is 'Surrogate loan key within a release; MERGE retains an existing key on reload. Facts reference this key. External applications should retain business keys.';
 comment on column dim_loan.loan_durable_key is 'Durable key from dim_loan_key_map, stable across releases for the same agency and loan ID';
 comment on column dim_loan.comparable_flag is 'Comparability eligibility: Y/N. Excludes nonstandard source populations using the four Freddie rules in metric definitions section 8.';

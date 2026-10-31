@@ -50,9 +50,9 @@ partition by list (release_id, source_file) (
 -- noqa: enable=all
 
 -- The table and column comments below spell out the official name, column position, type and maximum length,
--- so their lines exceed 80 characters; line length is not checked in this block (project convention)
+-- so their lines exceed 80 characters; line length is not checked in this block (internal convention)
 -- noqa: disable=LT05
-comment on table ods_perf_pre202607 is 'ODS: the Freddie monthly performance file (old layout sample_svcg_YYYY.txt, R46 and earlier) landed as-is. Primary key release_id + loan_sequence_number + monthly_reporting_period. All values stored as text, unchanged. Columns 1–32 follow the order of the File Layout (Pre-July 2026); the last two columns, release_id and source_file, are added by this project.';
+comment on table ods_perf_pre202607 is 'ODS: the Freddie monthly performance file (old layout sample_svcg_YYYY.txt, R46 and earlier) landed as-is. Primary key release_id + loan_sequence_number + monthly_reporting_period. All values stored as text, unchanged. Columns 1–32 follow the order of the File Layout (Pre-July 2026); the last two columns, release_id and source_file, are added by the ODS layer.';
 comment on column ods_perf_pre202607.loan_sequence_number is 'Loan Sequence Number | File Layout (Pre-July 2026) column 1 | Alpha Numeric - PYYQnXXXXXXX, max length 12';
 comment on column ods_perf_pre202607.monthly_reporting_period is 'Monthly Reporting Period | File Layout (Pre-July 2026) column 2 | Date, max length 6';
 comment on column ods_perf_pre202607.current_actual_upb is 'Current Actual UPB | File Layout (Pre-July 2026) column 3 | Numeric - 12,2, max length 12';
@@ -85,6 +85,6 @@ comment on column ods_perf_pre202607.delinquency_due_to_disaster is 'Delinquency
 comment on column ods_perf_pre202607.borrower_assistance_status_code is 'Borrower Assistance Status Code | File Layout (Pre-July 2026) column 30 | Alpha, max length 1';
 comment on column ods_perf_pre202607.current_month_modification_cost is 'Current Month Modification Cost | File Layout (Pre-July 2026) column 31 | Numeric - 12,2, max length 12';
 comment on column ods_perf_pre202607.interest_bearing_upb is 'Interest Bearing UPB | File Layout (Pre-July 2026) column 32 | Numeric - 12,2, max length 12';
-comment on column ods_perf_pre202607.release_id is 'Freddie data release, e.g. R46 (column added by this project; length 10 is a project convention, enough for such codes)';
-comment on column ods_perf_pre202607.source_file is 'Source file name; within a release, data is replaced file by file; traceable (column added by this project)';
+comment on column ods_perf_pre202607.release_id is 'Freddie data release, e.g. R46 (column added by the ODS layer; length 10 is a design choice, enough for such codes)';
+comment on column ods_perf_pre202607.source_file is 'Source file name; within a release, data is replaced file by file; traceable (column added by the ODS layer)';
 -- noqa: enable=LT05

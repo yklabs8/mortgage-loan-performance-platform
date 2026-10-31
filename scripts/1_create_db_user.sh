@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Name: 1_create_db_user.sh
-# Purpose: create the project user in FREEPDB1 and grant its privileges
+# Purpose: create the platform's database user in FREEPDB1 and grant its privileges
 # Usage: scripts/1_create_db_user.sh <user name>, for example scripts/1_create_db_user.sh loan_dw
 # Requires: database started (run 0_start_db.sh first)
 # Called by: run manually, only once

@@ -50,9 +50,9 @@ partition by list (release_id, source_file) (
 -- noqa: enable=all
 
 -- The table and column comments below spell out the official name, column position, type and maximum length,
--- so their lines exceed 80 characters; line length is not checked in this block (project convention)
+-- so their lines exceed 80 characters; line length is not checked in this block (internal convention)
 -- noqa: disable=LT05
-comment on table ods_orig_pre202607 is 'ODS: the Freddie origination file (old layout, R46 and earlier) landed as-is. Primary key release_id + loan_sequence_number. All values stored as text, unchanged. Columns 1–32 follow the order of the File Layout (Pre-July 2026); the last two columns, release_id and source_file, are added by this project.';
+comment on table ods_orig_pre202607 is 'ODS: the Freddie origination file (old layout, R46 and earlier) landed as-is. Primary key release_id + loan_sequence_number. All values stored as text, unchanged. Columns 1–32 follow the order of the File Layout (Pre-July 2026); the last two columns, release_id and source_file, are added by the ODS layer.';
 comment on column ods_orig_pre202607.credit_score is 'Credit Score | File Layout (Pre-July 2026) column 1 | Numeric, max length 4';
 comment on column ods_orig_pre202607.first_payment_date is 'First Payment Date | File Layout (Pre-July 2026) column 2 | Date, max length 6';
 comment on column ods_orig_pre202607.first_time_homebuyer_flag is 'First Time Homebuyer Flag | File Layout (Pre-July 2026) column 3 | Alpha, max length 1';
@@ -85,6 +85,6 @@ comment on column ods_orig_pre202607.harp_indicator is 'HARP Indicator | File La
 comment on column ods_orig_pre202607.property_valuation_method is 'Property Valuation Method | File Layout (Pre-July 2026) column 30 | Numeric, max length 1';
 comment on column ods_orig_pre202607.interest_only_i_o_indicator is 'Interest Only (I/O) Indicator | File Layout (Pre-July 2026) column 31 | Alpha, max length 1';
 comment on column ods_orig_pre202607.mortgage_insurance_cancellation_indicator is 'Mortgage Insurance Cancellation Indicator | File Layout (Pre-July 2026) column 32 | Alpha, max length 1';
-comment on column ods_orig_pre202607.release_id is 'Freddie data release, e.g. R46 (column added by this project; length 10 is a project convention, enough for such codes)';
-comment on column ods_orig_pre202607.source_file is 'Source file name; within a release, data is replaced file by file; traceable (column added by this project)';
+comment on column ods_orig_pre202607.release_id is 'Freddie data release, e.g. R46 (column added by the ODS layer; length 10 is a design choice, enough for such codes)';
+comment on column ods_orig_pre202607.source_file is 'Source file name; within a release, data is replaced file by file; traceable (column added by the ODS layer)';
 -- noqa: enable=LT05

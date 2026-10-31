@@ -47,9 +47,9 @@ partition by list (release_id, source_file) (
 -- noqa: enable=all
 
 -- The table and column comments below spell out the official name, column position, type and maximum length,
--- so their lines exceed 80 characters; line length is not checked in this block (project convention)
+-- so their lines exceed 80 characters; line length is not checked in this block (internal convention)
 -- noqa: disable=LT05
-comment on table ods_orig is 'ODS: the Freddie origination file (sample_orig_YYYY.txt / orig_YYYYQn.txt) landed as-is. One row per loan per release; primary key release_id + loan_identifier. All values stored as text, unchanged. Columns 1–31 follow the order of the File Layout (July 2026); the last two columns, release_id and source_file, are added by this project.';
+comment on table ods_orig is 'ODS: the Freddie origination file (sample_orig_YYYY.txt / orig_YYYYQn.txt) landed as-is. One row per loan per release; primary key release_id + loan_identifier. All values stored as text, unchanged. Columns 1–31 follow the order of the File Layout (July 2026); the last two columns, release_id and source_file, are added by the ODS layer.';
 
 comment on column ods_orig.classic_fico is 'Classic FICO® | File Layout (July 2026) column 1 | Numeric, max length 4';
 comment on column ods_orig.first_payment_date is 'First Payment Date | File Layout (July 2026) column 2 | Date, max length 6';
@@ -82,6 +82,6 @@ comment on column ods_orig.harp_indicator is 'HARP Indicator | File Layout (July
 comment on column ods_orig.property_valuation_method is 'Property Valuation Method | File Layout (July 2026) column 29 | Numeric, max length 1';
 comment on column ods_orig.interest_only_i_o_indicator is 'Interest Only (I/O) Indicator | File Layout (July 2026) column 30 | Alpha, max length 1';
 comment on column ods_orig.vantagescore_4_0 is 'VantageScore® 4.0 | File Layout (July 2026) column 31 | Numeric, max length 4';
-comment on column ods_orig.release_id is 'Freddie data release, e.g. R47 (column added by this project; length 10 is a project convention, enough for such codes)';
-comment on column ods_orig.source_file is 'Source file name; within a release, data is replaced file by file; traceable (column added by this project)';
+comment on column ods_orig.release_id is 'Freddie data release, e.g. R47 (column added by the ODS layer; length 10 is a design choice, enough for such codes)';
+comment on column ods_orig.source_file is 'Source file name; within a release, data is replaced file by file; traceable (column added by the ODS layer)';
 -- noqa: enable=LT05

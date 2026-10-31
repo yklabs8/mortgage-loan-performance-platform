@@ -1,6 +1,6 @@
 # Data Dictionary: Source Fields Used
 
-This dictionary covers the 14 Freddie Mac source fields that the project's analyses, segmentation, and review rules depend on, plus two columns added by the ODS layer and two derived fields. All other source fields are loaded unchanged but are not interpreted here.
+This dictionary covers the 14 Freddie Mac source fields that the current analyses, segmentation, and review rules depend on, plus two columns added by the ODS layer and two derived fields. All other source fields are loaded unchanged but are not interpreted here.
 
 **Sources** (page numbers are PDF page numbers, which match the printed page footers):
 
@@ -41,16 +41,16 @@ These fields also have the same position in both layouts.
 | 9 | Zero Balance Code | `zero_balance_code` | Numeric 2 → varchar2(2) | Why the balance went to zero, i.e. how the loan ended | `01` Prepaid or Matured, `02` Third Party Sale, `03` Short Sale or Charge Off, `09` REO Disposition, `15` Whole Loan Sales, `16` Reperforming Loan Securitizations, `96` defect prior to credit event | p.11 / p.11 | Final outcomes and terminated state in transitions *(later milestone)* |
 | 10 | Zero Balance Effective Date | `zero_balance_effective_date` | Date 6 (YYYYMM) → date | Month of the zero-balance event | YYYYMM | p.11 / p.12 | Termination month in the loan-level summary *(later milestone)* |
 
-## 3. Columns added by this project and derived fields
+## 3. Columns not in the source files: load metadata and derived fields
 
 | Name | Where | Meaning | Source |
 |---|---|---|---|
-| `release_id` | Every ODS, dimension, and fact table | Which publication the data came from (e.g. `R47`); supplied when loading | Project convention; the dataset is periodically corrected and republished (UG p.2) |
-| `source_file` | Every ODS table | Source file each row came from | Project convention, for traceability |
-| `origination_year` | Loan dimension | Characters 2–3 of the loan ID; `99` → 1999, otherwise 20YY | UG p.7–8 ("YYQn = origination year and quarter"); loans start in 1999 (UG p.2); the century mapping is a project convention |
+| `release_id` | Every ODS, dimension, and fact table | Which publication the data came from (e.g. `R47`); supplied when loading | Internal convention (not an official rule); the dataset is periodically corrected and republished (UG p.2) |
+| `source_file` | Every ODS table | Source file each row came from | Internal convention (not an official rule), for traceability |
+| `origination_year` | Loan dimension | Characters 2–3 of the loan ID; `99` → 1999, otherwise 20YY | UG p.7–8 ("YYQn = origination year and quarter"); loans start in 1999 (UG p.2); the century mapping is an internal convention |
 | `origination_quarter` | Loan dimension | Character 5 of the loan ID | As above |
 
 ## 4. Notes
 
 - The earlier User Guide uses a three-column table layout; page numbers refer to the page where the field heading appears, and value lists sometimes continue on the next page (for example, delinquency status on pp.10–11).
-- The current User Guide notes that, for periods on or before September 2025, `00` could also mean a cycle before the first payment date (p.10). The project treats `00` as not 60+ delinquent in either case, so the 60+ flag is unaffected.
+- The current User Guide notes that, for periods on or before September 2025, `00` could also mean a cycle before the first payment date (p.10). The warehouse treats `00` as not 60+ delinquent in either case, so the 60+ flag is unaffected.

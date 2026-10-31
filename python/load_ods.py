@@ -19,7 +19,7 @@ import sys  # read command-line arguments
 
 from db import connect  # database connection
 
-# rows per batch (project convention; the official sample recommends a large value to reduce round trips)
+# rows per batch (internal convention; the official sample recommends a large value to reduce round trips)
 BATCH_SIZE = 50_000
 
 

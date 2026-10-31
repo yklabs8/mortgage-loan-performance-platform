@@ -15,7 +15,7 @@ create table dim_zero_balance_code (
 );
 
 -- noqa: disable=LT05
-comment on table dim_zero_balance_code is 'DIM: one row per agency and Zero Balance Code. Official meanings: User Guide p.11. Codes appear in the final reporting month (p.16). Project exit categories: metric definitions section 5.';
+comment on table dim_zero_balance_code is 'DIM: one row per agency and Zero Balance Code. Official meanings: User Guide p.11. Codes appear in the final reporting month (p.16). Internal exit categories (not official): metric definitions section 5.';
 comment on column dim_zero_balance_code.data_source is 'Source agency: FRE = Freddie Mac; foreign key paired with the fact zero-balance code';
 comment on column dim_zero_balance_code.zero_balance_code is 'Unmodified agency zero-balance code';
 comment on column dim_zero_balance_code.zero_balance_desc is 'Official code description (Freddie User Guide p.11)';

@@ -5,7 +5,7 @@ Usage:
   python python/raw_manifest.py verify <raw data folder> <manifest file>
 Example: python python/raw_manifest.py verify ../data/raw docs/raw_manifest.csv
 build: add checksums for files not yet in the manifest; files already listed are only checked, never rewritten
-       (raw files are never modified, project convention; a changed checksum means the file is damaged or was
+       (raw files are never modified, an internal convention; a changed checksum means the file is damaged or was
        replaced, which must raise an error instead of being overwritten silently).
 verify: recompute the checksum of every listed file; exit with failure if a file is missing or its size or checksum differs;
         files present in the folder but not in the manifest only produce a notice (run build for new downloads first).
@@ -21,7 +21,7 @@ import os  # walk folders, read file information
 import sys  # read command-line arguments, set the exit status
 
 FIELDS = ["path", "folder", "size_bytes", "sha256", "file_time"]  # manifest columns
-# read 8 MB at a time so large files do not fill memory (project convention)
+# read 8 MB at a time so large files do not fill memory (internal convention)
 CHUNK = 8 * 1024 * 1024
 
 
