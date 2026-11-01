@@ -309,6 +309,195 @@ select :dq_run_id, '&release_id', rule_id, source_table, source_file
    , loan_identifier, raw_period, reason, disposition
 from findings;
 
+-- DQ017 (internal rule): every column that is converted to a number must fit its official type;
+-- otherwise the whole batch is rejected (each offending cell is logged; rows are not quarantined).
+-- Why check before conversion: the detail columns are number(p,s), and Oracle silently rounds
+-- extra decimal places on insert instead of raising an error.
+-- Why reject the batch: a malformed or over-long value usually means the publisher changed the format;
+-- quarantining a few rows would quietly shrink the analysis, so loading stops for a manual review.
+-- Only the numeric value counts: integer digits after removing the sign and leading zeros, and
+-- decimal digits after removing trailing zeros; anything that is not a plain number (letters,
+-- spaces, exponents) also fails.
+-- Official types come from both File Layouts (Numeric 4 = 4 integer digits; Numeric - 12,2 =
+-- 12 digits in total, 2 of them decimals). Column 12 (non-interest bearing UPB) has no scale in
+-- the File Layout; it is treated as 12,2 because the User Guide (July 2026) defines Current Actual
+-- UPB as interest bearing plus non-interest bearing UPB (p.10) and lists it as a $ Amount (p.12).
+insert into dq_issue (
+   run_id, release_id, rule_id, source_table, source_file
+   , loan_identifier, raw_period, reason, disposition
+)
+with
+cells as (
+   select
+      'ODS_ORIG' as source_table, source_file, loan_identifier
+      , cast(null as varchar2(20)) as raw_period, column_name, raw_value
+   from (select * from ods_orig where release_id = '&release_id')
+   unpivot (
+      raw_value for column_name in (
+         classic_fico as 'classic_fico'
+         , mortgage_insurance_percentage_mi as 'mortgage_insurance_percentage_mi'
+         , number_of_units as 'number_of_units'
+         , original_combined_loan_to_value_cltv
+         as 'original_combined_loan_to_value_cltv'
+         , original_debt_to_income_dti_ratio
+         as 'original_debt_to_income_dti_ratio'
+         , original_upb as 'original_upb'
+         , original_loan_to_value_ltv as 'original_loan_to_value_ltv'
+         , original_interest_rate as 'original_interest_rate'
+         , original_loan_term as 'original_loan_term'
+         , number_of_borrowers as 'number_of_borrowers'
+         , vantagescore_4_0 as 'vantagescore_4_0'
+      )
+   )
+   union all
+   select
+      'ODS_ORIG_PRE202607', source_file, loan_sequence_number
+      , cast(null as varchar2(20)), column_name, raw_value
+   from (select * from ods_orig_pre202607 where release_id = '&release_id')
+   unpivot (
+      raw_value for column_name in (
+         credit_score as 'credit_score'
+         , mortgage_insurance_percentage_mi as 'mortgage_insurance_percentage_mi'
+         , number_of_units as 'number_of_units'
+         , original_combined_loan_to_value_cltv
+         as 'original_combined_loan_to_value_cltv'
+         , original_debt_to_income_dti_ratio
+         as 'original_debt_to_income_dti_ratio'
+         , original_upb as 'original_upb'
+         , original_loan_to_value_ltv as 'original_loan_to_value_ltv'
+         , original_interest_rate as 'original_interest_rate'
+         , original_loan_term as 'original_loan_term'
+         , number_of_borrowers as 'number_of_borrowers'
+      )
+   )
+   union all
+   select
+      'ODS_PERF', source_file, loan_identifier
+      , monthly_reporting_period, column_name, raw_value
+   from (select * from ods_perf where release_id = '&release_id')
+   unpivot (
+      raw_value for column_name in (
+         current_actual_upb as 'current_actual_upb'
+         , loan_age as 'loan_age'
+         , remaining_months_to_legal_maturity
+         as 'remaining_months_to_legal_maturity'
+         , current_interest_rate as 'current_interest_rate'
+         , current_non_interest_bearing_upb as 'current_non_interest_bearing_upb'
+         , mi_recoveries as 'mi_recoveries'
+         , non_mi_recoveries as 'non_mi_recoveries'
+         , total_expenses as 'total_expenses'
+         , legal_costs as 'legal_costs'
+         , maintenance_and_preservation_costs
+         as 'maintenance_and_preservation_costs'
+         , taxes_and_insurance as 'taxes_and_insurance'
+         , miscellaneous_expenses as 'miscellaneous_expenses'
+         , actual_loss as 'actual_loss'
+         , cumulative_modification_costs as 'cumulative_modification_costs'
+         , estimated_loan_to_value_eltv as 'estimated_loan_to_value_eltv'
+         , zero_balance_removal_upb as 'zero_balance_removal_upb'
+         , delinquent_accrued_interest as 'delinquent_accrued_interest'
+         , current_period_modification_costs
+         as 'current_period_modification_costs'
+         , current_interest_bearing_upb as 'current_interest_bearing_upb'
+         , bankruptcy_cramdown_costs as 'bankruptcy_cramdown_costs'
+      )
+   )
+   union all
+   select
+      'ODS_PERF_PRE202607', source_file, loan_sequence_number
+      , monthly_reporting_period, column_name, raw_value
+   from (select * from ods_perf_pre202607 where release_id = '&release_id')
+   unpivot (
+      raw_value for column_name in (
+         current_actual_upb as 'current_actual_upb'
+         , loan_age as 'loan_age'
+         , remaining_months_to_legal_maturity
+         as 'remaining_months_to_legal_maturity'
+         , current_interest_rate as 'current_interest_rate'
+         , current_deferred_upb as 'current_deferred_upb'
+         , mi_recoveries as 'mi_recoveries'
+         , non_mi_recoveries as 'non_mi_recoveries'
+         , expenses as 'expenses'
+         , legal_costs as 'legal_costs'
+         , maintenance_and_preservation_costs
+         as 'maintenance_and_preservation_costs'
+         , taxes_and_insurance as 'taxes_and_insurance'
+         , miscellaneous_expenses as 'miscellaneous_expenses'
+         , actual_loss_calculation as 'actual_loss_calculation'
+         , modification_cost as 'modification_cost'
+         , estimated_loan_to_value_eltv as 'estimated_loan_to_value_eltv'
+         , zero_balance_removal_upb as 'zero_balance_removal_upb'
+         , delinquent_accrued_interest as 'delinquent_accrued_interest'
+         , current_month_modification_cost as 'current_month_modification_cost'
+         , interest_bearing_upb as 'interest_bearing_upb'
+      )
+   )
+)
+
+-- Allowed integer and decimal digits per column; columns not listed are 12,2 amounts
+-- (Numeric - 12,2 = 10 integer digits + 2 decimals)
+, spec as (
+   -- Origination file (same in both layouts; File Layout columns 1, 6, 7, 9-13, 22, 23, 31)
+   select 'classic_fico' as column_name, 4 as int_digits, 0 as scale_digits from dual
+   union all select 'credit_score', 4, 0 from dual
+   union all select 'mortgage_insurance_percentage_mi', 3, 0 from dual
+   union all select 'number_of_units', 2, 0 from dual
+   union all select 'original_combined_loan_to_value_cltv', 3, 0 from dual
+   union all select 'original_debt_to_income_dti_ratio', 3, 0 from dual
+   union all select 'original_upb', 12, 0 from dual
+   union all select 'original_loan_to_value_ltv', 3, 0 from dual
+   union all select 'original_interest_rate', 3, 3 from dual
+   union all select 'original_loan_term', 3, 0 from dual
+   union all select 'number_of_borrowers', 2, 0 from dual
+   union all select 'vantagescore_4_0', 4, 0 from dual
+   -- Monthly performance file (same in both layouts; File Layout columns 5, 6, 11, 26)
+   union all select 'loan_age', 3, 0 from dual
+   union all select 'remaining_months_to_legal_maturity', 3, 0 from dual
+   union all select 'current_interest_rate', 5, 3 from dual
+   union all select 'estimated_loan_to_value_eltv', 4, 0 from dual
+)
+
+, checked as (
+   select
+      c.*
+      , coalesce(s.int_digits, 10) as int_digits
+      , coalesce(s.scale_digits, 2) as scale_digits
+   from cells c
+   left join spec s on s.column_name = c.column_name
+)
+
+select
+   :dq_run_id, '&release_id', 'DQ017', source_table, source_file
+   , loan_identifier, raw_period
+   , substr('Number does not fit the official type: ' || column_name || '=' || raw_value, 1, 200)
+   , 'REJECT'
+from checked
+where
+   not regexp_like(raw_value, '^-?[0-9]*(\.[0-9]*)?$')
+   or not regexp_like(raw_value, '[0-9]')
+   or coalesce(
+      length(ltrim(regexp_substr(raw_value, '^-?([0-9]*)', 1, 1, null, 1), '0'))
+      , 0
+   ) > int_digits
+   or coalesce(
+      length(rtrim(regexp_substr(raw_value, '\.([0-9]*)$', 1, 1, null, 1), '0'))
+      , 0
+   ) > scale_digits;
+
+insert into dq_check_result (
+   run_id, rule_id, severity, rule_desc, bad_count, release_id, dw_layer
+)
+select
+   :dq_run_id
+   , 'DQ017'
+   , 'HARD'
+   , 'Cells whose number does not fit the official type or is not a number (whole batch rejected)'
+   , count(*)
+   , '&release_id'
+   , 'ODS'
+from dq_issue
+where run_id = :dq_run_id and rule_id = 'DQ017';
+
 insert into dq_quarantine (
    issue_id, release_id, source_table, source_file, loan_identifier
    , raw_period, rule_id, reason
