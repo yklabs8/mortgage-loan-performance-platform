@@ -40,9 +40,21 @@ def read_entries(path):
     return entries
 
 
-def password_from_file(user):
+def entry_key(user, target):
+    """Database accounts are kept per database (test-database entries carry a test: prefix); llm_ entries are model keys and are not per database."""
+    if target == "DEMO" or user.lower().startswith("llm_"):
+        return user.lower()
+    return f"{target.lower()}:{user.lower()}"
+
+
+def password_from_file(user, target=None):
     entries = read_entries(file_path())
-    value = entries.get(user.lower())
+    from database_target import settings
+
+    target = settings()[0] if target is None else target.upper()
+    if target not in {"DEMO", "TEST", "RESTORE"}:
+        raise ValueError("Invalid database target")
+    value = entries.get(entry_key(user, target))
     if value == "":
         return None
     if value is not None and not isinstance(value, str):
@@ -52,7 +64,7 @@ def password_from_file(user):
     return value
 
 
-def save_password(user, password):
+def save_password(user, password, target=None):
     """Atomically save to the private file without printing the password."""
     if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", user):
         raise ValueError("Invalid database user name")
@@ -71,7 +83,13 @@ def save_password(user, password):
             "Password directory permission must be owner-only (chmod 700)"
         )
     entries = read_entries(path)
-    entries[user.lower()] = password
+    if target is None:
+        from database_target import settings
+
+        target = settings()[0]
+    if target not in ("DEMO", "TEST", "RESTORE"):
+        raise ValueError("Invalid database target")
+    entries[entry_key(user, target)] = password
     handle, temp_name = tempfile.mkstemp(prefix=".passwords-", dir=folder)
     try:
         os.fchmod(handle, 0o600)
@@ -86,9 +104,13 @@ def save_password(user, password):
             os.unlink(temp_name)
 
 
-def lookup(user):
+def lookup(user, target=None):
     """Read only the private file and report a missing account entry."""
-    password = password_from_file(user)
+    password = (
+        password_from_file(user)
+        if target is None
+        else password_from_file(user, target=target)
+    )
     if not password:
         raise RuntimeError(
             f"No saved password for {user}; run password_store.py set {user}"
@@ -105,7 +127,7 @@ if __name__ == "__main__":
         raise SystemExit("Usage: password_store.py USER | set USER")
     try:
         if sys.argv[1] == "set":
-            first = getpass.getpass(f"Existing database password for {sys.argv[2]}: ")
+            first = getpass.getpass(f"Password or API key for {sys.argv[2]}: ")
             second = getpass.getpass("Enter it again: ")
             if first != second:
                 raise ValueError("Passwords do not match")

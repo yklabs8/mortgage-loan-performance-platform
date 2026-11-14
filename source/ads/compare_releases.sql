@@ -1,5 +1,9 @@
+-- Name: compare_releases.sql
+-- Purpose: compare two releases: delete this pair's old results, then compare dim_loan and dwd_loan_monthly_perf;
+--          commit only if everything succeeds; if any step fails, all changes of this comparison are rolled back
+-- Requires: compare_dim_loan and compare_dwd_loan_monthly_perf exist
 -- compare_releases.sql
--- Compare releases. See docs/metric_definitions.md for analytical definitions.
+
 create or replace procedure compare_releases(
    in_old_release_id in varchar2
    , in_new_release_id in varchar2
@@ -52,6 +56,12 @@ begin
 
    compare_dim_loan(in_old_release_id, in_new_release_id);
    compare_dwd_loan_monthly_perf(in_old_release_id, in_new_release_id);
+   record_dw_calculation(
+      'ADS_RELEASE_DIFF_SUMMARY', in_new_release_id, in_old_release_id
+   );
+   record_dw_calculation(
+      'ADS_RELEASE_DIFF_DETAIL', in_new_release_id, in_old_release_id
+   );
    commit;
    exception
       when others then

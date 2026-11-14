@@ -10,7 +10,7 @@ import oracledb
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "python"))
 
 import load_ods
-from db import connect
+from db import connect_test_database as connect
 
 TABLE = "ods_zz_exchange"
 STAGE = f"{TABLE}_stage"
@@ -116,3 +116,10 @@ class LoadOdsExchangeTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def setUpModule():
+    """Before any fixture or failure cleanup in this module, verify the real database environment."""
+    from db import connect_test_database
+
+    connect_test_database().close()

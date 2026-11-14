@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:lang="${#locale.language == 'en'} ? 'en' : 'zh-CN'">
+<head th:replace="~{fragments :: head(#{login.title})}"></head>
+<body class="center">
+<main class="card narrow">
+  <h1 th:text="#{app.name}">Loan Risk Review</h1>
+  <p class="flash err" th:if="${param.error}" th:text="#{login.error}">Incorrect username or password</p>
+  <p class="flash err" th:if="${param.locked}" th:text="#{login.locked}">Five failed attempts in a row: the account is locked for 15 minutes. Please try again later.</p>
+  <p class="flash ok" th:if="${param.logout}" th:text="#{login.loggedOut}">Signed out</p>
+  <!-- th:action adds the CSRF token automatically (hidden field _csrf) -->
+  <form th:action="@{/login}" method="post" class="stack">
+    <label><span th:text="#{login.username}">Username</span> <input type="text" name="username" autocomplete="username" required autofocus></label>
+    <label><span th:text="#{login.password}">Password</span> <input type="password" name="password" autocomplete="current-password" required></label>
+    <button type="submit" th:text="#{login.submit}">Sign in</button>
+  </form>
+  <p class="muted" th:text="#{login.demoHint}">Demo account passwords are in app/demo-users.local.txt (local only, never committed to git).</p>
+</main>
+<footer th:replace="~{fragments :: footer}"></footer>
+</body>
+</html>

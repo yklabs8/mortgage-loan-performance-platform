@@ -1,16 +1,39 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<!--
+  Parts shared by every page: head (title, styles), navigation bar, messages. Page text is in messages.properties (#{...}).
+  All output uses th:text (which escapes < > & " as entities, preventing XSS); no inline scripts or style attributes (CSP allows only this site's style files).
+-->
+<html xmlns:th="http://www.thymeleaf.org" th:lang="${#locale.language == 'en'} ? 'en' : 'zh-CN'">
 <head th:fragment="head(title)">
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title th:text="${title} + ' · Loan review'">Loan review</title>
+  <title th:text="${title} + ' · ' + #{app.name}">Loan Risk Review</title>
   <link rel="stylesheet" th:href="@{/css/app.css}">
 </head>
 <body>
 <header th:fragment="nav" class="nav">
-  <a class="brand" th:href="@{/candidates}">Loan review</a>
-  <a th:href="@{/candidates}">Review candidates</a>
+  <a class="brand" th:href="@{/}" th:text="#{app.name}">Loan Risk Review</a>
+  <a th:href="@{/candidates}" th:text="#{nav.candidates}">Review Candidates</a>
+  <a th:href="@{/cases}" th:text="#{nav.cases}">Cases</a>
+  <a th:href="@{/reports}" th:text="#{nav.reports}">Monthly Report</a>
+  <span class="spacer"></span>
+  <span class="who">
+    <span th:text="${username}">User</span>
+    <span class="tag" th:text="${isManager} ? #{role.manager} : #{role.analyst}">Role</span>
+  </span>
+  <a th:href="@{/account/password}" th:text="#{nav.password}">Change Password</a>
+  <form th:action="@{/logout}" method="post" class="inline">
+    <button type="submit" class="link" th:text="#{nav.logout}">Sign out</button>
+  </form>
 </header>
 
+<div th:fragment="flash">
+  <p class="flash ok" th:if="${message}" th:text="${message}">Success</p>
+  <p class="flash err" th:if="${error}" th:text="${error}">Error</p>
+</div>
+
+<footer th:fragment="footer" class="footer">
+  <span th:if="${appVersion}" th:text="#{footer.version(${appVersion})}">Version abc1234</span>
+</footer>
 </body>
 </html>

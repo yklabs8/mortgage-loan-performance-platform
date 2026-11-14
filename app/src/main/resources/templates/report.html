@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:lang="${#locale.language == 'en'} ? 'en' : 'zh-CN'">
+<head th:replace="~{fragments :: head(#{report.title})}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main>
+  <h1 th:text="#{report.title}">Monthly Review Report</h1>
+  <p class="muted">
+    <span th:text="#{report.sourceNote}">From the warehouse report view rpt_review_case_monthly, recomputed after each incremental extract (not real time). Data as of</span>
+    <span th:text="${total.dataUntil != null} ? ${#temporals.format(total.dataUntil, 'yyyy-MM-dd HH:mm')} : #{report.neverExtracted}">Time</span>
+  </p>
+
+  <section class="card">
+    <dl class="grid">
+      <dt th:text="#{report.cases}">Cases</dt><dd th:text="${total.caseCount}">0</dd>
+      <dt th:text="#{report.escalated}">Ever escalated</dt><dd th:text="${total.escalatedCount}">0</dd>
+      <dt th:text="#{report.reopened}">Ever reopened</dt><dd th:text="${total.reopenedCount}">0</dd>
+      <dt th:text="#{report.closed}">Closed</dt><dd th:text="${total.closedCount}">0</dd>
+      <dt th:text="#{report.avgDays}">Avg. days to first close</dt><dd th:text="${total.avgDaysToClose} ?: '—'">—</dd>
+    </dl>
+  </section>
+
+  <p class="muted" th:if="${#lists.isEmpty(rows)}" th:text="#{report.empty}">No cases have reached the warehouse yet.</p>
+  <table th:unless="${#lists.isEmpty(rows)}">
+    <thead>
+    <tr><th th:text="#{report.openedMonth}">Opened month</th><th th:text="#{col.source}">Source</th><th th:text="#{report.rule}">Rule</th>
+      <th th:text="#{report.currentStatus}">Current status</th><th th:text="#{report.cases}">Cases</th><th th:text="#{report.escalated}">Ever escalated</th>
+      <th th:text="#{report.reopened}">Ever reopened</th><th th:text="#{report.closed}">Closed</th><th th:text="#{report.avgDays}">Avg. days to first close</th></tr>
+    </thead>
+    <tbody>
+    <tr th:each="r : ${rows}">
+      <td th:text="${#temporals.format(r.openedMonth, 'yyyy-MM')}">2026-10</td>
+      <td th:text="${r.dataSource}">FRE</td>
+      <td th:text="${r.ruleCode}">Rule</td>
+      <td><span class="status" th:classappend="${r.currentStatus}" th:text="#{${'status.' + r.currentStatus}}">Status</span></td>
+      <td th:text="${r.caseCount}">1</td>
+      <td th:text="${r.escalatedCount}">0</td>
+      <td th:text="${r.reopenedCount}">0</td>
+      <td th:text="${r.closedCount}">0</td>
+      <td th:text="${r.avgDaysToClose} ?: '—'">—</td>
+    </tr>
+    </tbody>
+  </table>
+</main>
+<footer th:replace="~{fragments :: footer}"></footer>
+</body>
+</html>

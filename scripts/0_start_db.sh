@@ -6,7 +6,7 @@
 # Called by: run manually before any table-creation or loading script
 set -euo pipefail  # stop immediately if any step fails
 
-container="${ORACLE_CONTAINER:-oracle-db}"  # container name
+container=$("$(dirname "$0")/../.venv/bin/python" "$(dirname "$0")/../python/database_target.py" container)  # container name
 docker start "$container" >/dev/null  # start the container; fine if it is already running
 for _ in $(seq 1 100); do  # wait at most 100 times
   status=$(docker inspect "$container" --format '{{.State.Health.Status}}')  # read health status

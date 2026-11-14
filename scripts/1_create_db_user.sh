@@ -7,7 +7,7 @@
 # Note: you type the password at run time; it is not shown on screen and never written to any file
 set -euo pipefail  # stop immediately if any step fails
 
-container="${ORACLE_CONTAINER:-oracle-db}"  # container name
+container=$("$(dirname "$0")/../.venv/bin/python" "$(dirname "$0")/../python/database_target.py" container)  # container name
 user="${1:?Usage: $0 <user name>}"  # user name from the argument; error if missing
 [[ "$user" =~ ^[A-Za-z][A-Za-z0-9_]*$ ]] || { echo "User name may only contain letters, digits and underscores, and must start with a letter" >&2; exit 1; }
 read -rs -p "Set a password for $user: " pw1; echo  # read the password without echo

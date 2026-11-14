@@ -1,11 +1,23 @@
+# Name: application.yml (configuration of the review web application)
+# The database password is not here: scripts/12_run_app.sh reads it from the private file and passes it to the application only through the process variable LOAN_DW_DB_PASSWORD
 spring:
+  # Interface text: messages.properties; never falls back to the computer's system language
+  messages:
+    fallback-to-system-locale: false
   application:
     name: review-app
   datasource:
-    url: jdbc:oracle:thin:@//${LOAN_DW_DB_HOST:localhost}:1521/FREEPDB1
+    url: jdbc:oracle:thin:@//${LOAN_DW_DB_DSN:localhost:1521/FREEPDB1}
     username: ${LOAN_DW_DB_USER:loan_app}
     password: ${LOAN_DW_DB_PASSWORD}
     hikari:
+      # Review business tables are owned by loan_oltp; warehouse objects are named with an explicit loan_dw prefix in queries.
+      # current_schema affects only name resolution and grants no database privilege.
       connection-init-sql: alter session set current_schema = ${LOAN_DW_DB_SCHEMA:LOAN_OLTP}
 server:
   port: 8081
+  servlet:
+    session:
+      cookie:
+        http-only: true   # page scripts cannot read the login cookie
+        same-site: lax    # requests sent from other sites do not carry the login cookie

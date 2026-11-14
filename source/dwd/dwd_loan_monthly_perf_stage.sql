@@ -1,5 +1,12 @@
+-- Name: dwd_loan_monthly_perf_stage.sql
+-- Purpose: stage table for the detail table: when a release is loaded, new rows are written here first,
+--          then exchanged with that release's partition of dwd_loan_monthly_perf after checks (Oracle's partition exchange load).
+--          The exchange changes only the data dictionary and moves no data: new rows become the live partition, old rows come here and are then truncated.
+--          Normally empty. Columns and primary key must match the detail table exactly for the exchange to work; foreign keys too, so every row written here
+--          is checked on insert and the exchange can skip validation (without validation)
+-- Requires: dim_loan, dim_date, dim_servicer, dim_delinquency_status, dim_zero_balance_code exist (foreign keys point to them)
 -- dwd_loan_monthly_perf_stage.sql
--- Dwd loan monthly perf stage. See docs/metric_definitions.md for analytical definitions.
+
 create table dwd_loan_monthly_perf_stage (
    loan_identifier varchar2(12)
    , monthly_reporting_period date
@@ -44,14 +51,13 @@ create table dwd_loan_monthly_perf_stage (
    , constraint dwd_loan_monthly_perf_stage_pk primary key (
       release_id, loan_identifier, monthly_reporting_period
    )
-   , constraint dlmps_dl_fk foreign key (release_id, loan_identifier)
-   references dim_loan (release_id, loan_identifier)
+   -- Surrogate and business keys reference the same dim_loan row as a pair (one foreign key guarantees both "the loan exists" and "the two keys agree")
+   , constraint dlmps_dl_fk foreign key (loan_key, release_id, loan_identifier)
+   references dim_loan (loan_key, release_id, loan_identifier)
    , constraint dlmps_dds_fk foreign key (current_loan_delinquency_status)
    references dim_delinquency_status (status_code)
    , constraint dlmps_dzbc_fk foreign key (data_source, zero_balance_code)
    references dim_zero_balance_code (data_source, zero_balance_code)
-   , constraint dlmps_dl_key_fk foreign key (loan_key)
-   references dim_loan (loan_key)
    , constraint dlmps_dd_fk foreign key (period_date_key)
    references dim_date (date_key)
    , constraint dlmps_ds_fk foreign key (servicer_key)

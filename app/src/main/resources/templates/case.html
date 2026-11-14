@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:lang="${#locale.language == 'en'} ? 'en' : 'zh-CN'">
+<head th:replace="~{fragments :: head(${c.caseNumber})}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main>
+  <h1>
+    <span th:text="${c.caseNumber}">RRC-000001</span>
+    <span class="status" th:classappend="${c.currentStatus}" th:text="#{${'status.' + c.currentStatus}}">Status</span>
+  </h1>
+  <div th:replace="~{fragments :: flash}"></div>
+
+  <section class="card">
+    <h2 th:text="#{case.section}">Case</h2>
+    <dl class="grid">
+      <dt th:text="#{case.loan}">Loan</dt><dd th:text="${c.dataSource} + ' ' + ${c.loanIdentifier}">FRE loan ID</dd>
+      <dt th:text="#{col.triggerMonth}">Trigger month</dt><dd th:text="${#temporals.format(c.reportingMonth, 'yyyy-MM')}">2020-06</dd>
+      <dt th:text="#{col.dlqStatus}">Delinquency status</dt><dd th:text="${evidence != null} ? ${evidence.currentLoanDelinquencyStatus} : ${c.delinquencyStatus}">2</dd>
+      <dt th:text="#{case.rule}">Rule</dt>
+      <dd th:text="#{case.ruleText(${c.ruleCode}, ${'' + c.versionNo}, ${c.minDelinquencyStatus})}">Rule</dd>
+      <dt th:text="#{case.release}">Data release</dt><dd th:text="${evidence != null} ? ${evidence.sourceReleaseId} : ${c.sourceReleaseId}">R47</dd>
+      <dt th:text="#{col.openedBy}">Opened by</dt><dd th:text="${c.openedBy}">Opened by</dd>
+      <dt th:text="#{col.assignee}">Assigned to</dt><dd th:text="${c.assignee} ?: #{case.notAssigned}">Assigned to</dd>
+      <dt th:text="#{col.openedAt}">Opened at</dt><dd th:text="${#temporals.format(c.openedAt, 'yyyy-MM-dd HH:mm')}">Time</dd>
+      <dt th:text="#{col.closedAt}">Closed at</dt>
+      <dd th:text="${c.closedAt != null} ? ${#temporals.format(c.closedAt, 'yyyy-MM-dd HH:mm')} : '—'">Time</dd>
+    </dl>
+  </section>
+
+  <p th:if="${hasNewEvidence}" th:text="#{case.newEvidence}">Newer evidence exists; this case still shows the version referenced when it was opened.</p>
+  <div th:replace="~{evidence :: evidence}"></div>
+
+  <section class="card">
+    <h2 th:text="#{case.history}">History</h2>
+    <table>
+      <thead><tr><th th:text="#{case.time}">Time</th><th th:text="#{case.who}">Who</th><th th:text="#{case.what}">What</th><th th:text="#{case.detail}">Details</th></tr></thead>
+      <tbody>
+      <!-- Notes are user input and are output with th:text: a <script> shows as text and is never executed -->
+      <tr th:each="a : ${activities}">
+        <td th:text="${#temporals.format(a.happenedAt, 'yyyy-MM-dd HH:mm')}">Time</td>
+        <td th:text="${a.userName} ?: '—'">Who</td>
+        <td th:text="#{${'activity.' + a.kind}}">What</td>
+        <td th:switch="${a.kind}">
+          <span th:case="'STATUS'" th:text="(${a.fromCode} == null ? #{activity.opened} : #{${'status.' + a.fromCode}}) + ' → ' + #{${'status.' + a.toCode}}">Status</span>
+          <span th:case="'ASSIGN'" th:text="#{activity.assignedTo(${a.text})}">Assign</span>
+          <span th:case="'DECISION'" th:text="#{activity.decisionText(#{${'decision.' + a.fromCode}}, ${a.text})}">Decision</span>
+          <span th:case="*" class="pre" th:text="${a.text}">Note</span>
+        </td>
+      </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <th:block th:if="${c.isTerminal == 'N' or (isManager and c.currentStatus == 'CLOSED')}">
+    <section class="card" th:if="${isManager and c.isTerminal == 'N'}">
+      <h2 th:text="#{case.assignSection}">Assign</h2>
+      <form th:action="@{/cases/{id}/assign(id=${c.caseId})}" th:object="${assignForm}" method="post" class="row">
+        <label><span th:text="#{case.analyst}">Analyst</span>
+          <select th:field="*{assigneeUserId}">
+            <option value="" th:text="#{case.choose}">Choose</option>
+            <option th:each="o : ${analysts}" th:value="${o.value}" th:text="${o.label}">Analyst</option>
+          </select>
+        </label>
+        <button type="submit" th:text="#{case.assignButton}">Assign</button>
+      </form>
+      <p class="field-err" th:if="${#fields.hasErrors('${assignForm.assigneeUserId}')}"
+         th:errors="${assignForm.assigneeUserId}">Error</p>
+    </section>
+
+    <p class="muted" th:if="${c.currentStatus == 'OPEN'}" th:text="#{case.waitAssign}">Notes can be added after a manager assigns the case.</p>
+
+    <section class="card" th:if="${c.currentStatus == 'ASSIGNED' or c.currentStatus == 'IN_REVIEW' or c.currentStatus == 'ESCALATED'}">
+      <h2 th:text="#{case.noteSection}">Add note</h2>
+      <form th:action="@{/cases/{id}/annotate(id=${c.caseId})}" th:object="${noteForm}" method="post" class="stack">
+        <textarea th:field="*{noteText}" rows="4" maxlength="1000" th:placeholder="#{case.notePlaceholder}"></textarea>
+        <p class="field-err" th:if="${#fields.hasErrors('noteText')}" th:errors="*{noteText}">Error</p>
+        <button type="submit" th:text="#{case.saveNote}">Save note</button>
+      </form>
+    </section>
+
+    <section class="card danger" th:if="${isManager}">
+      <h2 th:text="#{case.decideSection}">Decision</h2>
+      <p class="muted" th:unless="${c.currentStatus == 'IN_REVIEW' or c.currentStatus == 'ESCALATED' or c.currentStatus == 'CLOSED'}"
+         th:text="#{case.decideHint}">A decision requires the case to be assigned and to have a note (status "In review").</p>
+      <form th:if="${c.currentStatus == 'IN_REVIEW' or c.currentStatus == 'ESCALATED' or c.currentStatus == 'CLOSED'}"
+            th:action="@{/cases/{id}/decide(id=${c.caseId})}" th:object="${decisionForm}" method="post" class="stack">
+        <input type="hidden" th:field="*{expectedStatus}">
+        <p class="field-err" th:if="${#fields.hasErrors('expectedStatus')}" th:errors="*{expectedStatus}">Error</p>
+        <div class="row">
+          <label th:if="${c.currentStatus == 'IN_REVIEW' or c.currentStatus == 'ESCALATED'}">
+            <input type="radio" th:field="*{decisionType}" value="CLOSE"> <span th:text="#{decision.CLOSE}">Close</span></label>
+          <label th:if="${c.currentStatus == 'IN_REVIEW'}">
+            <input type="radio" th:field="*{decisionType}" value="ESCALATE"> <span th:text="#{decision.ESCALATE}">Escalate</span></label>
+          <label th:if="${c.currentStatus == 'CLOSED'}">
+            <input type="radio" th:field="*{decisionType}" value="REOPEN"> <span th:text="#{decision.REOPEN}">Reopen</span></label>
+        </div>
+        <p class="field-err" th:if="${#fields.hasErrors('decisionType')}" th:errors="*{decisionType}">Error</p>
+        <textarea th:field="*{decisionNote}" rows="3" maxlength="1000" th:placeholder="#{case.reasonPlaceholder}"></textarea>
+        <p class="field-err" th:if="${#fields.hasErrors('decisionNote')}" th:errors="*{decisionNote}">Error</p>
+        <label class="confirm">
+          <input type="checkbox" name="confirmed" value="true">
+          <span th:text="#{case.confirm}">I confirm this decision</span>
+        </label>
+        <p class="field-err" th:if="${#fields.hasErrors('confirmed')}" th:errors="*{confirmed}">Error</p>
+        <button type="submit" class="danger" th:text="#{case.submitDecision}">Submit decision</button>
+      </form>
+    </section>
+  </th:block>
+</main>
+<footer th:replace="~{fragments :: footer}"></footer>
+</body>
+</html>

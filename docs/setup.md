@@ -1,6 +1,6 @@
 # Setup and load one sample
 
-Steps 1–9 load one Freddie Mac sample year into the warehouse and check the results; steps 10–11 add the candidate page.
+Steps 1–9 load one Freddie Mac sample year into the warehouse with a verified source batch and check the results; steps 10–11 select review candidates with Spark, run the review application, and capture its changes back into the warehouse. This version was deployed from an empty database with exactly these steps, using the 2010 sample of release R47.
 
 ## Source data
 
@@ -12,7 +12,7 @@ The provided manifest records six archives used to build the warehouse, includin
 
 ## Steps
 
-Run these commands from the repository root in a bash shell. You need Docker and Python 3.11; the candidate page also needs Java and Maven.
+Run these commands from the repository root in a bash shell. You need Docker and Python 3.11; the review application needs Java 17 and Maven, and candidate selection needs Apache Spark 3.5 (`spark-submit` in local mode; no cluster).
 
 1. Start a new Oracle Database Free container, then wait for its health check. If you already created `oracle-db`, skip `docker run` and use the waiting script. The container uses a persistent Docker volume named `oracle-data`.
 
@@ -45,11 +45,11 @@ Run these commands from the repository root in a bash shell. You need Docker and
    RAW_DIR="../data/raw/$RELEASE"
    mkdir -p "$RAW_DIR"
    # Copy the downloaded ZIP to "$RAW_DIR/$ARCHIVE" using your file manager.
-   .venv/bin/python python/raw_manifest.py build "$RAW_DIR" ../data/my_manifest.csv
-   .venv/bin/python python/raw_manifest.py verify "$RAW_DIR" ../data/my_manifest.csv
+   .venv/bin/python python/raw_manifest.py build ../data/raw ../data/my_manifest.csv
+   .venv/bin/python python/raw_manifest.py verify ../data/raw ../data/my_manifest.csv
    ```
 
-   `build` records every non-hidden file in `$RAW_DIR`; `verify` must finish with “All N files in the manifest match” before loading. Keep the manifest outside that directory so it cannot list itself. To verify the exact archives listed in `docs/raw_manifest.csv`, instead use `../data/raw` as the raw directory and that CSV as the manifest; missing listed archives make verification fail.
+   `build` records every non-hidden file under `../data/raw` with its release folder, which the source-batch check in step 9 uses to find each loaded file's archive; `verify` must finish with “All N files in the manifest match” before loading. Keep the manifest outside that directory so it cannot list itself. To verify the exact archives listed in `docs/raw_manifest.csv`, instead use `../data/raw` as the raw directory and that CSV as the manifest; missing listed archives make verification fail.
 
 5. Inspect and extract the archive with Python's standard library. Choose the table names from the two filenames shown by the listing, not from the origination year. The example commands below assume the July 2026 or later layout.
 
@@ -76,68 +76,28 @@ Run these commands from the repository root in a bash shell. You need Docker and
 
 The loader checks the number of rows in its staging table and compares fingerprints before and after partition exchange.
 
-8. Deploy the complete sample warehouse into a **fresh** `loan_dw` schema after ODS setup. Do not apply these CREATE TABLE statements over an existing installation. The order below creates referenced objects before compiling the loaders. Date, geography, and code seed loaders run as scripts; the loan and servicer loaders create procedures.
+8. Create the review accounts and every remaining object: dimensions, facts, summaries, analyses, the review (OLTP) database, change data capture, and lineage. Save the three account passwords first. The script deploys each file as its owner in dependency order, marks this database as a TEST environment (the write tests refuse to run anywhere else, so use a development database), grows the USERS tablespace file to 4 GB if smaller, creates the least-privilege web account `loan_app`, and finishes with a SQL test that logs in as that account. Run it once on a new database.
 
    ```bash
-   scripts/run_sql.sh source/dim/dim_date.sql
-   scripts/run_sql.sh source/dim/dim_geography.sql
-   scripts/run_sql.sh source/dim/dim_servicer.sql
-   scripts/run_sql.sh source/dim/dim_loan_key_map.sql
-   scripts/run_sql.sh source/dim/dim_delinquency_status.sql
-   scripts/run_sql.sh source/dim/dim_zero_balance_code.sql
-   scripts/run_sql.sh source/dim/dim_loan.sql
-   scripts/run_sql.sh source/dim/v_loan_segment.sql
-   scripts/run_sql.sh source/dwd/dwd_loan_monthly_perf.sql
-   scripts/run_sql.sh source/dwd/dwd_loan_monthly_perf_stage.sql
-   scripts/run_sql.sh source/dwd/dw_recompute_loan.sql
-   scripts/run_sql.sh source/dws/dws_perf_loan_td.sql
-   scripts/run_sql.sh source/dws/dws_mod_loan_td.sql
-   scripts/run_sql.sh source/ads/ads_vintage_dlq60_curve.sql
-   scripts/run_sql.sh source/ads/ads_dlq_transition_monthly.sql
-   scripts/run_sql.sh source/ads/ads_modification_outcome.sql
-   scripts/run_sql.sh source/ads/ads_dlq_transition_segment.sql
-   scripts/run_sql.sh source/ads/ads_final_outcome_segment.sql
-   scripts/run_sql.sh source/ads/ads_cure_redefault_segment.sql
-   scripts/run_sql.sh source/ads/ads_vintage_dlq60_segment.sql
-   scripts/run_sql.sh source/ads/ads_modification_segment.sql
-   scripts/run_sql.sh source/ads/ads_release_diff.sql
-   scripts/run_sql.sh checks/dq_check_result.sql
-   scripts/run_sql.sh checks/dq_issue.sql
-   scripts/run_sql.sh checks/dq_ods_ready.sql
-   scripts/run_sql.sh source/dim/load_dim_date.sql
-   scripts/run_sql.sh source/dim/load_dim_geography.sql
-   scripts/run_sql.sh source/dim/load_dim_delinquency_status.sql
-   scripts/run_sql.sh source/dim/load_dim_zero_balance_code.sql
-   scripts/run_sql.sh source/dim/load_dim_loan.sql
-   scripts/run_sql.sh source/dim/load_dim_servicer.sql
-   scripts/run_sql.sh source/dwd/load_dwd_loan_monthly_perf.sql
-   scripts/run_sql.sh source/dws/load_dws_perf_loan_td.sql
-   scripts/run_sql.sh source/dws/load_dws_mod_loan_td.sql
-   scripts/run_sql.sh source/ads/load_ads_vintage_dlq60_curve.sql
-   scripts/run_sql.sh source/ads/load_ads_dlq_transition_monthly.sql
-   scripts/run_sql.sh source/ads/load_ads_modification_outcome.sql
-   scripts/run_sql.sh source/ads/load_ads_dlq_transition_segment.sql
-   scripts/run_sql.sh source/ads/load_ads_final_outcome_segment.sql
-   scripts/run_sql.sh source/ads/load_ads_cure_redefault_segment.sql
-   scripts/run_sql.sh source/ads/load_ads_vintage_dlq60_segment.sql
-   scripts/run_sql.sh source/ads/load_ads_modification_segment.sql
-   scripts/run_sql.sh source/ads/compare_dim_loan.sql
-   scripts/run_sql.sh source/ads/compare_dwd_loan_monthly_perf.sql
-   scripts/run_sql.sh source/ads/compare_releases.sql
-   scripts/run_sql.sh source/dwd/find_recompute_loans.sql
-   scripts/run_sql.sh source/dwd/recompute_downstream_targeted.sql
-   scripts/run_sql.sh source/dwd/gather_dw_stats.sql
-   scripts/run_sql.sh source/dwd/load_dw_release.sql
-   scripts/run_sql.sh source/rpt/rpt_views.sql
-   scripts/run_sql.sh checks/check_invalid_objects.sql
+   .venv/bin/python python/password_store.py set loan_oltp
+   .venv/bin/python python/password_store.py set loan_app
+   .venv/bin/python python/password_store.py set loan_test
+   scripts/5_create_schema.sh
    ```
 
-9. Check the loaded ODS release, then load the warehouse. HARD failures stop processing. Invalid loan references and invalid months may be excluded only after full row-level quarantine has been recorded. A later successful source reload invalidates the prior gate, so rerun `dq_ods.sql` after reloading.
+9. Check the loaded ODS release, register and verify the source batch, then load the warehouse. HARD failures stop processing. Invalid loan references and invalid months may be excluded only after full row-level quarantine has been recorded. A later successful source reload invalidates the prior gate, so rerun `dq_ods.sql` after reloading.
 
    ```bash
    scripts/run_sql.sh checks/dq_ods.sql "release_id=$RELEASE"
+   export LOAN_RAW_MANIFEST=../data/my_manifest.csv
+   RUN_ID=$(.venv/bin/python python/etl_log.py start release "$RELEASE")
+   BATCH_ID=$(.venv/bin/python python/lineage_batch.py begin "$RELEASE" "$RUN_ID")
+   .venv/bin/python python/lineage_batch.py finish "$RELEASE" "$BATCH_ID"
    scripts/2_load_dw_release.sh "$RELEASE"
+   .venv/bin/python python/etl_log.py end "$RUN_ID" SUCCESS
    ```
+
+   `finish` checks every file this release has in ODS against its archive in the manifest (ZIP size and SHA-256, the member inside the ZIP, the extracted text, and a row-by-row fingerprint of ODS) and only then marks the batch verified. Use the release label `R45` or `R46` for the earlier layout and `R47` for the July 2026 layout. The warehouse loader refuses to publish if ODS has a load newer than the latest verified batch. Each DWS and ADS publication is recorded in `dw_calculation` with its row count, result digest, source batch, parent calculation, and run.
 
    The warehouse loader validates and exchanges the release fact partition before recomputing summaries. If summary processing fails after exchange, the detail is already new: investigate and rerun.
 
@@ -157,55 +117,76 @@ The loader checks the number of rows in its staging table and compares fingerpri
 
    For release comparison, fully load both releases first, then run `scripts/run_sql.sh source/ads/run_compare_releases.sql old_release=OLD new_release=NEW`. To load a corrected release using a baseline, run `scripts/2_load_dw_release.sh NEW OLD`. Unchanged loan summaries are copied; affected loans are recomputed. Without a baseline the loader recomputes everything. `python/reconcile_loan_bands.py` is an additional check expecting all three releases R45, R46, and R47.
 
-10. Create separate OLTP and page accounts, then deploy the core tables and package. Save passwords in the local password store before running the account scripts. The warehouse owner grants the OLTP owner direct SELECT on the monthly fact; the package needs this direct grant to compile. Deploy the tables and seed as `loan_oltp`, then compile and check the package.
+10. Select review candidates with Spark and import them. Export the inputs (one release and origination year) and the rule in effect for the reporting month, run the selection in Spark local mode, then import the delivery package into the review database. The import validates the package (file digests, row counts, business keys, rule version, and each evidence digest) and merges it in one transaction; importing the same package again changes nothing. Choose a reporting month represented in the fact table.
 
     ```bash
-    .venv/bin/python python/password_store.py set loan_oltp
-    .venv/bin/python python/password_store.py set loan_app
-    scripts/14_create_oltp_user.sh
-    scripts/run_sql.sh source/ops/grant_dw_to_oltp.sql
-    ORACLE_USER=loan_oltp scripts/run_sql.sh source/oltp/oltp_tables.sql
-    ORACLE_USER=loan_oltp scripts/run_sql.sh source/oltp/oltp_seed.sql
-    ORACLE_USER=loan_oltp scripts/run_sql.sh source/oltp/review_api.sql
-    ORACLE_USER=loan_oltp scripts/run_sql.sh checks/check_invalid_objects.sql
-    scripts/13_create_app_user.sh
+    WORK=../data/candidates
+    MONTH=2020-06-01
+    rm -rf "$WORK" && mkdir -p "$WORK/input"
+    .venv/bin/python python/export_dims_for_spark.py "$WORK/input" "$RELEASE" "$YEAR"
+    ORACLE_USER=loan_oltp .venv/bin/python python/export_candidate_rule.py "$MONTH" > "$WORK/input/rule.json"
+    LOAN_CODE_COMMIT=$(git rev-parse HEAD) LOAN_CODE_DIRTY=0 \
+    LOAN_METRIC_SHA256=$(shasum -a 256 docs/metric_definitions.md | cut -d ' ' -f 1) \
+    spark-submit --master 'local[2]' --driver-memory 1g \
+      --py-files spark/candidate_contract.py,spark/delivery_contract.py,spark/review_candidates.py,spark/freddie_layout.py \
+      spark/sample_candidates.py "$WORK/input" "$WORK/out" "$RELEASE" "$MONTH" "$YEAR"
+    .venv/bin/python python/candidate_import.py "$WORK"/out/deliveries/*
     ```
 
-11. Generate candidates as `loan_oltp` for one reporting month in the loaded release, then start the read-only page. `REPORTING_MONTH` is `YYYYMM`; choose a month represented in the fact table. The procedure adds a loan only when its delinquency level first crosses the rule threshold, and rerunning it does not duplicate existing candidates. The temporary SQL file only invokes the published package.
+    The Spark step prints `DELIVERY_PATH=` with the package folder. With the 2010 sample of R47 and June 2020, 108 candidates are delivered.
+
+11. Run the review application, then capture its changes into the warehouse. `11_set_demo_passwords.sh` writes random passwords for `analyst_demo` and `manager_demo` to `app/demo-users.local.txt` (not in git). Open `http://localhost:8081`, sign in as the manager, open a case from Review Candidates, assign it to the analyst, sign in as the analyst to add a note, then close or escalate it as the manager. The monthly report is recomputed from the warehouse, so run the extraction after working in the application, then reconcile the warehouse with OLTP.
 
     ```bash
-    REPORTING_MONTH=202501
-    cat > /tmp/loan_review_generate.sql <<'SQL'
-    variable created number
-    begin
-       review_api.generate_candidates(
-          '&release_id', to_date('&reporting_month', 'YYYYMM'), 'DLQ60_ENTRY', :created
-       );
-       commit;
-    end;
-    /
-    print created
-    SQL
-    ORACLE_USER=loan_oltp scripts/run_sql.sh /tmp/loan_review_generate.sql "release_id=$RELEASE" "reporting_month=$REPORTING_MONTH"
-    rm /tmp/loan_review_generate.sql
+    scripts/11_set_demo_passwords.sh
     scripts/12_run_app.sh
+    # in another terminal, after using the application:
+    scripts/run_sql.sh source/dim/run_load_dim_review_rule.sql
+    scripts/run_sql.sh source/dwd/run_cdc_review.sql
+    scripts/run_sql.sh checks/dq_review_cdc.sql
     ```
 
-Open `http://localhost:8081/candidates`. The page account has SELECT on only the three core OLTP tables, with no table-write or package-execute grant.
+    `run_cdc_review.sql` reads cases and status changes modified since the last watermark minus a 10-minute overlap window, merges them into `dwd_review_case` and `dwd_review_case_event`, updates the SCD2 user dimension, recomputes `ads_review_case_monthly`, and records the run and its calculation in one transaction. `dq_review_cdc.sql` fails if case counts, status-change counts, current statuses, or the report total differ between OLTP and the warehouse.
 
 ## Tests
 
-After the ODS objects exist, run the database-backed tests with the same database user and password source used in the steps above:
+The tests write data and roll it back, so they run only on a database marked TEST (step 8). Run step 11's rule sync and extraction once before the SQL tests, so the rule and user dimensions are populated.
+
+Python tests (ODS loading and exchange, candidate delivery contract, candidate import, release comparison and targeted recomputation). `test/test_targeted_baseline.py` needs releases R45 and R46 of the same origination year fully loaded (step 9 for each): it checks that a targeted recomputation of R46 from the R45 baseline gives exactly the same DWS and ADS rows as the full load, that a release with no state transitions completes, and that a baseline with a missing modification summary is rejected before any target data changes:
 
 ```bash
 .venv/bin/python -m unittest discover -s test -p "test_*.py"
 ```
 
-The tests create and drop small temporary tables, exercise bad inputs and reloads, and do not need Freddie Mac data. They require a working Oracle connection and the deployed `ods_file_hash` function and `ods_exchange_file` procedure.
-
-For the candidate page, compile the Java application after deploying the OLTP objects. With `scripts/12_run_app.sh` running in another terminal, the following request should return the candidate HTML page; add `?loan=LOAN_ID` to check the bound loan-ID filter.
+Web application tests (security requirements, full workflow from candidate to monthly report, concurrent decisions, password change and lockout, error IDs); they use the test account `loan_test` and roll back:
 
 ```bash
-mvn -B -f app/pom.xml -DskipTests package
-curl -f http://localhost:8081/candidates
+scripts/12_run_app.sh test
 ```
+
+SQL tests. The five suites below use [utPLSQL](https://github.com/utPLSQL/utPLSQL) v3.2.3, installed into the database with grants for `loan_dw`, `loan_oltp`, and `loan_test`; each file is deployed first and then run:
+
+```bash
+ORACLE_USER=loan_oltp scripts/run_sql.sh test/test_review_workflow.sql
+ORACLE_USER=loan_oltp scripts/run_sql.sh test/run_utplsql.sql suite_name=test_review_workflow
+ORACLE_USER=loan_test scripts/run_sql.sh test/test_dim_review_rule.sql
+ORACLE_USER=loan_test scripts/run_sql.sh test/run_utplsql.sql suite_name=test_dim_review_rule
+scripts/run_sql.sh test/test_dim_review_user.sql
+scripts/run_sql.sh test/run_utplsql.sql suite_name=test_dim_review_user
+ORACLE_USER=loan_test scripts/run_sql.sh test/test_review_cdc.sql
+ORACLE_USER=loan_test scripts/run_sql.sh test/run_utplsql.sql suite_name=test_review_cdc
+ORACLE_USER=loan_test scripts/run_sql.sh test/test_ads_review_case_monthly.sql
+ORACLE_USER=loan_test scripts/run_sql.sh test/run_utplsql.sql suite_name=test_ads_review_case_monthly
+```
+
+These SQL checks need no framework:
+
+```bash
+.venv/bin/python python/check_app_privileges.py
+ORACLE_USER=loan_oltp scripts/run_sql.sh test/test_oltp_dw_privileges.sql
+scripts/run_sql.sh test/test_dw_oltp_write_privileges.sql
+scripts/run_sql.sh test/test_review_reopen_duration.sql
+ORACLE_USER=loan_test scripts/run_sql.sh test/test_review_dq011_bypass.sql
+```
+
+`test_review_cdc.sql` proves the late-commit case: with no overlap window a change committed after its timestamp was passed is missed, and with the 10-minute window it is caught. `check_app_privileges.py` creates its own candidate, runs `test_app_user_privileges.sql` logged in as the web account, and cleans up; the SQL test and proves it cannot drop or create tables, delete cases, change other columns, or read ODS, underlying analysis tables, or quality results.

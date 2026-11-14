@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:lang="${#locale.language == 'en'} ? 'en' : 'zh-CN'">
+<head th:replace="~{fragments :: head(#{error.title})}"></head>
+<body class="center">
+<main class="card narrow">
+  <h1 th:text="${status}">Error</h1>
+  <p th:switch="${status}">
+    <span th:case="403" th:text="#{error.403}">You do not have permission to do this.</span>
+    <span th:case="404" th:text="#{error.404}">Page or record not found.</span>
+    <span th:case="400" th:text="#{error.400}">The request is not valid.</span>
+    <span th:case="*" th:text="#{error.other}">Something went wrong. Please try again later.</span>
+  </p>
+  <p th:if="${errorId}" th:text="#{error.id(${errorId})}">Error ID: 1a2b3c4d</p>
+  <p><a th:href="@{/}" th:text="#{error.home}">Back to home</a></p>
+</main>
+<footer th:replace="~{fragments :: footer}"></footer>
+</body>
+</html>

@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:lang="${#locale.language == 'en'} ? 'en' : 'zh-CN'">
+<head th:replace="~{fragments :: head(#{cases.title})}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main>
+  <h1 th:text="${isManager} ? #{cases.headingAll} : #{cases.headingMine}">Cases</h1>
+  <div th:replace="~{fragments :: flash}"></div>
+  <p class="muted" th:if="${#lists.isEmpty(cases)}" th:text="#{cases.empty}">No cases yet. Open one from Review Candidates.</p>
+  <table th:unless="${#lists.isEmpty(cases)}">
+    <thead>
+    <tr><th th:text="#{col.caseNumber}">Case No.</th><th th:text="#{col.status}">Status</th><th th:text="#{col.source}">Source</th>
+      <th th:text="#{col.loan}">Loan ID</th><th th:text="#{col.triggerMonth}">Trigger month</th><th th:text="#{col.openedBy}">Opened by</th>
+      <th th:text="#{col.assignee}">Assigned to</th><th th:text="#{col.openedAt}">Opened at</th><th th:text="#{col.closedAt}">Closed at</th></tr>
+    </thead>
+    <tbody>
+    <tr th:each="c : ${cases}">
+      <td><a th:href="@{/cases/{id}(id=${c.caseId})}" th:text="${c.caseNumber}">RRC-000001</a></td>
+      <td><span class="status" th:classappend="${c.currentStatus}" th:text="#{${'status.' + c.currentStatus}}">Status</span></td>
+      <td th:text="${c.dataSource}">FRE</td>
+      <td th:text="${c.loanIdentifier}">Loan ID</td>
+      <td th:text="${#temporals.format(c.reportingMonth, 'yyyy-MM')}">2020-06</td>
+      <td th:text="${c.openedBy}">Opened by</td>
+      <td th:text="${c.assignee} ?: '—'">Assigned to</td>
+      <td th:text="${#temporals.format(c.openedAt, 'yyyy-MM-dd HH:mm')}">Time</td>
+      <td th:text="${c.closedAt != null} ? ${#temporals.format(c.closedAt, 'yyyy-MM-dd HH:mm')} : '—'">Time</td>
+    </tr>
+    </tbody>
+  </table>
+</main>
+<footer th:replace="~{fragments :: footer}"></footer>
+</body>
+</html>

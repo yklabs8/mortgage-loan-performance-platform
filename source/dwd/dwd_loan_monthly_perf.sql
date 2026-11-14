@@ -1,4 +1,13 @@
--- dwd_loan_monthly_perf.sql
+-- Name: dwd_loan_monthly_perf.sql
+-- Purpose: create the DWD-layer monthly loan performance detail: one row per release, loan, and month, converting the
+--          ods_perf text to proper types
+--          List-partitioned by release_id, one partition per release: reading one release reads only its partition;
+--          a load first writes the stage table dwd_loan_monthly_perf_stage, then exchanges it with this release's partition (load_dw_release).
+--          The table starts with only a default partition (no data); load_dw_release splits each release's partition out of it on first load.
+--          The primary-key index is local (one per partition) and is exchanged together with the partition
+-- Requires: dim_loan, dim_date, dim_servicer, dim_delinquency_status, dim_zero_balance_code exist (foreign keys point to them)
+-- Called by: scripts/run_sql.sh source/dwd/dwd_loan_monthly_perf.sql (run once)
+
 -- Dwd loan monthly perf. See docs/metric_definitions.md for analytical definitions.
 -- noqa: disable=all
 create table dwd_loan_monthly_perf (
@@ -45,14 +54,13 @@ create table dwd_loan_monthly_perf (
    , constraint dwd_loan_monthly_perf_pk primary key (
       release_id, loan_identifier, monthly_reporting_period
    ) using index local
-   , constraint dlmp_dl_fk foreign key (release_id, loan_identifier)
-   references dim_loan (release_id, loan_identifier)
+   -- Surrogate and business keys reference the same dim_loan row as a pair (one foreign key guarantees both "the loan exists" and "the two keys agree")
+   , constraint dlmp_dl_fk foreign key (loan_key, release_id, loan_identifier)
+   references dim_loan (loan_key, release_id, loan_identifier)
    , constraint dlmp_dds_fk foreign key (current_loan_delinquency_status)
    references dim_delinquency_status (status_code)
    , constraint dlmp_dzbc_fk foreign key (data_source, zero_balance_code)
    references dim_zero_balance_code (data_source, zero_balance_code)
-   , constraint dlmp_dl_key_fk foreign key (loan_key)
-   references dim_loan (loan_key)
    , constraint dlmp_dd_fk foreign key (period_date_key)
    references dim_date (date_key)
    , constraint dlmp_ds_fk foreign key (servicer_key)
@@ -64,7 +72,8 @@ partition by list (release_id) (
 -- noqa: enable=all
 
 -- noqa: disable=LT05
-comment on table dwd_loan_monthly_perf is 'DWD: one row per release, loan, and reporting month. List-partitioned by release_id; loaded by partition exchange. Business and surrogate foreign keys reference loan, date, servicer, delinquency status, and agency-specific exit code dimensions. Source: ods_perf or ods_perf_pre202607; dates and amounts converted, codes retained.';
+-- noqa: disable=LT05
+comment on table dwd_loan_monthly_perf is 'DWD: one row per release, loan, and reporting month. List-partitioned by release_id (partition P_ + release_id); loaded by partition exchange; primary key release_id + loan_identifier + monthly_reporting_period. A composite foreign key (loan_key, release_id, loan_identifier) references dim_loan, guaranteeing the loan exists and both keys point to the same row; other foreign keys reference date, servicer, delinquency status, and agency-specific exit code dimensions. Source: ods_perf or ods_perf_pre202607; dates and amounts converted, codes retained.';
 comment on column dwd_loan_monthly_perf.loan_identifier is 'Loan Identifier | Source: ods_perf.loan_identifier (File Layout July 2026 column 1, Alpha Numeric - PYYQnXXXXXXX) | Retain source text';
 comment on column dwd_loan_monthly_perf.monthly_reporting_period is 'Period | Source: ods_perf.monthly_reporting_period (File Layout July 2026 column 2, Date) | Convert YYYYMM to the first day of that month';
 comment on column dwd_loan_monthly_perf.current_actual_upb is 'Current Actual UPB | Source: ods_perf.current_actual_upb (File Layout July 2026 column 3, Numeric - 12,2) | Convert text to NUMBER(12,2) using the official precision; DQ017 checks the digits before conversion and rejects the batch if a value does not fit, so nothing is rounded silently';
@@ -102,7 +111,7 @@ comment on column dwd_loan_monthly_perf.servicer_name is 'Servicer Name | Source
 comment on column dwd_loan_monthly_perf.bankruptcy_cramdown_costs is 'Bankruptcy Cramdown Costs | Source: ods_perf.bankruptcy_cramdown_costs (File Layout July 2026 column 35, Numeric - 12,2) | Convert text to NUMBER(12,2) using the official precision; DQ017 checks the digits before conversion and rejects the batch if a value does not fit, so nothing is rounded silently';
 comment on column dwd_loan_monthly_perf.data_source is 'Source agency: FRE = Freddie Mac. Paired with the zero-balance code to reference dim_zero_balance_code.';
 comment on column dwd_loan_monthly_perf.release_id is 'Source data release, e.g. R47';
-comment on column dwd_loan_monthly_perf.loan_key is 'Loan surrogate key looked up by release_id and loan_identifier';
+comment on column dwd_loan_monthly_perf.loan_key is 'Loan surrogate key looked up by release_id and loan_identifier; with the business key it forms a composite foreign key to dim_loan, so the database guarantees both identify the same loan';
 comment on column dwd_loan_monthly_perf.period_date_key is 'Monthly reporting date (first of month) as integer YYYYMMDD; foreign key to dim_date';
 comment on column dwd_loan_monthly_perf.servicer_key is 'Servicer surrogate key looked up by raw name; missing names map to 0';
 -- noqa: enable=LT05

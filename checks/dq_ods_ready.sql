@@ -1,5 +1,8 @@
--- dq_ods_ready.sql
--- Dq ods ready. See docs/metric_definitions.md for analytical definitions.
+-- Name: dq_ods_ready.sql
+-- Purpose: expose, per release, only the latest ODS check run that is complete (every current rule ran), passed, and is later than the last load.
+-- Requires: dq_run, dq_check_result, dq_issue, dq_quarantine, ods_load_event.
+-- Called by: detail loading, warehouse reconciliation, the load entry check.
+
 create or replace view dq_ods_ready_run as
 with latest_runs as (
    select
@@ -27,9 +30,11 @@ where
       )
       , timestamp '1900-01-01 00:00:00'
    )
+   -- Require DQ017: it is the last result dq_ods.sql writes and the newest rule.
+   -- Checking only DQ000 would let an old run from before DQ017 pass, and out-of-range values would be silently rounded into the detail table
    and exists (
       select 1 from dq_check_result c
-      where c.run_id = r.run_id and c.rule_id = 'DQ000'
+      where c.run_id = r.run_id and c.rule_id = 'DQ017'
    )
    and not exists (
       select 1 from dq_check_result c
@@ -65,6 +70,6 @@ inner join dq_issue i on r.run_id = i.run_id
 inner join dq_quarantine q on i.issue_id = q.issue_id;
 
 -- noqa: disable=LT05
-comment on table dq_ods_ready_run is 'Latest ODS check per release must be complete, passed, and newer than the last load';
-comment on table dq_ods_quarantine_keys is 'Distinct quarantined source rows from the latest valid ODS check';
+comment on table dq_ods_ready_run is 'Per release, the latest ODS check run must be complete, passed, and later than the last load';
+comment on table dq_ods_quarantine_keys is 'Each quarantined raw row from the latest valid ODS check appears once';
 -- noqa: enable=LT05

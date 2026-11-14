@@ -1,0 +1,5 @@
+spring:
+  datasource:
+    url: jdbc:oracle:thin:@//${LOAN_DW_DB_DSN:localhost:1522/FREEPDB1}
+    hikari:
+      connection-init-sql: "declare l_environment varchar2(10); begin select environment_name into l_environment from loan_dw.database_environment; if l_environment != 'TEST' then raise_application_error(-20990, 'Write tests require TEST database'); end if; execute immediate 'alter session set current_schema = LOAN_OLTP'; end;"

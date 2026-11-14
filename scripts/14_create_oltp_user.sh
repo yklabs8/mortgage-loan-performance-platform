@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
+# Name: 14_create_oltp_user.sh
+# Purpose: create the separate OLTP user loan_oltp, granted only what it needs to create business objects.
+# Usage: scripts/14_create_oltp_user.sh
+# Requires: Oracle container started; the administrator can log in to FREEPDB1 as sysdba inside the container.
+#!/usr/bin/env bash
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
-container="${ORACLE_CONTAINER:-oracle-db}"
+container=$("$(dirname "$0")/../.venv/bin/python" "$(dirname "$0")/../python/database_target.py" container)
 oltp_user="loan_oltp"
 
 pw=$(.venv/bin/python python/password_store.py "$oltp_user")
@@ -10,6 +15,7 @@ if [[ ! "$pw" =~ ^[A-Za-z0-9_#@!%+.,:-]{12,30}$ ]]; then
   echo "Password must be 12-30 characters using letters, digits, or _#@!%+.,:-" >&2
   exit 1
 fi
+
 
 docker exec -i "$container" sqlplus -s / as sysdba <<SQL
 whenever sqlerror exit sql.sqlcode
@@ -23,7 +29,7 @@ begin
    else
       execute immediate 'alter user $oltp_user identified by "$pw"';
    end if;
-   execute immediate 'grant create session, create table, create sequence, create procedure to $oltp_user';
+   execute immediate 'grant create session, create table, create sequence, create procedure, create trigger to $oltp_user';
    execute immediate 'alter user $oltp_user quota 128M on USERS';
 end;
 /

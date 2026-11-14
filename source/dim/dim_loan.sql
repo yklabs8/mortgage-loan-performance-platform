@@ -1,4 +1,10 @@
--- dim_loan.sql
+-- Name: dim_loan.sql
+-- Purpose: create the DIM-layer loan dimension dim_loan: one row per release and loan, converting ods_orig text to proper types.
+--          A loan has three identities, stored separately: surrogate key loan_key (this row, one per release),
+--          durable key loan_durable_key (the loan itself, stable across releases), and release_id (which publication)
+-- Requires: dim_geography and dim_loan_key_map exist (foreign keys point to them)
+-- Called by: scripts/run_sql.sh source/dim/dim_loan.sql (run once)
+
 -- Dim loan. See docs/metric_definitions.md for analytical definitions.
 -- noqa: disable=PRS
 create table dim_loan (
@@ -65,6 +71,10 @@ create table dim_loan (
    , constraint dim_loan_release_durable_uk unique (
       release_id, loan_durable_key
    )
+   -- Target of the detail tables' composite foreign key: surrogate and business keys are referenced as a pair, so the database guarantees they point to the same row
+   , constraint dim_loan_key_release_loan_uk unique (
+      loan_key, release_id, loan_identifier
+   )
    , constraint dim_loan_data_source_ck check (data_source in ('FRE'))
    , constraint dim_loan_comparable_ck check (comparable_flag in ('Y', 'N'))
    , constraint dl_dg_fk foreign key (property_state)
@@ -74,6 +84,7 @@ create table dim_loan (
 );
 -- noqa: enable=PRS
 
+-- noqa: disable=LT05
 -- noqa: disable=LT05
 comment on table dim_loan is 'DIM: one loan per release. Surrogate primary key loan_key; unique release_id plus loan_identifier. Origination attributes are converted from ods_orig or ods_orig_pre202607; source codes and special unavailable values are retained. Release differences represent source corrections rather than SCD Type 2 business changes.';
 comment on column dim_loan.classic_fico is 'Classic FICO® | Source: ods_orig.classic_fico (File Layout July 2026 column 1, Numeric) | Convert text to NUMBER(4) using the official precision; DQ017 checks the digits before conversion and rejects the batch if a value does not fit, so nothing is rounded silently';

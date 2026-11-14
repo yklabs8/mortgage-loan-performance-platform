@@ -1,0 +1,48 @@
+<div xmlns:th="http://www.thymeleaf.org" th:fragment="evidence">
+  <p th:if="${evidence == null}" th:text="#{evidence.none}">No delivered evidence.</p>
+  <section class="card" th:if="${evidence != null}">
+    <h2 th:text="#{evidence.version}">Evidence version</h2>
+    <dl class="grid">
+      <dt th:text="#{evidence.id}">Evidence ID</dt><dd th:text="${evidence.evidenceId}"></dd>
+      <dt th:text="#{evidence.delivery}">Delivery ID</dt><dd th:text="${evidence.deliveryId}"></dd>
+      <dt th:text="#{evidence.sha}">Content SHA-256</dt><dd th:text="${evidence.contentSha256}"></dd>
+      <dt th:text="#{evidence.source}">Source release</dt><dd th:text="${evidence.sourceReleaseId}"></dd>
+      <dt th:text="#{evidence.rule}">Rule and threshold</dt><dd th:text="${evidence.ruleCode} + ' v' + ${evidence.versionNo} + ' ≥ ' + ${evidence.minDelinquencyStatus}"></dd>
+      <dt th:text="#{evidence.status}">Current / previous status</dt><dd th:text="${evidence.currentLoanDelinquencyStatus} + ' / ' + (${evidence.previousDelinquencyStatus} ?: #{evidence.missing})"></dd>
+      <dt th:text="#{evidence.upb}">Current UPB</dt><dd th:text="${evidence.currentActualUpb}"></dd>
+      <dt th:text="#{evidence.rate}">Current interest rate</dt><dd th:text="${evidence.currentInterestRate}"></dd>
+      <dt th:text="#{evidence.zeroBalance}">Zero-balance code / date / modification flag</dt><dd th:text="(${evidence.zeroBalanceCode} ?: '—') + ' / ' + (${evidence.zeroBalanceEffectiveDate} ?: '—') + ' / ' + (${evidence.modificationFlag} ?: '—')"></dd>
+    </dl>
+  </section>
+  <section class="card" th:if="${loanInfo != null}">
+    <h2 th:text="#{evidence.loanInfo}">Origination data (delivered evidence)</h2>
+    <dl class="grid">
+      <dt th:text="#{evidence.originationYear}">Origination year</dt><dd th:text="${loanInfo.originationYear}">2010</dd>
+      <dt th:text="#{evidence.firstPayment}">First payment month</dt><dd th:text="${#temporals.format(loanInfo.firstPaymentDate, 'yyyy-MM')}">2010-03</dd>
+      <dt th:text="#{evidence.state}">State</dt><dd th:text="${loanInfo.propertyState}">CA</dd>
+      <dt th:text="#{evidence.fico}">Credit score</dt><dd th:text="${loanInfo.classicFico} ?: '—'">750</dd>
+      <dt th:text="#{evidence.originalUpb}">Original UPB</dt><dd th:text="${#numbers.formatDecimal(loanInfo.originalUpb, 1, 'COMMA', 0, 'POINT')}">200,000</dd>
+      <dt th:text="#{evidence.ltv}">Original LTV (%)</dt><dd th:text="${loanInfo.originalLoanToValueLtv} ?: '—'">80</dd>
+      <dt th:text="#{evidence.originalRate}">Original interest rate (%)</dt><dd th:text="${loanInfo.originalInterestRate}">5.0</dd>
+    </dl>
+  </section>
+
+  <section class="card">
+    <h2 th:text="#{evidence.months}">Performance in the trigger month and the 12 months before it (delivered evidence)</h2>
+    <table>
+      <thead><tr><th th:text="#{evidence.month}">Month</th><th th:text="#{evidence.dlqStatus}">Delinquency status</th><th th:text="#{evidence.upb}">Current UPB</th>
+        <th th:text="#{evidence.ratePct}">Current rate (%)</th><th th:text="#{evidence.zbCode}">Zero-balance code</th><th th:text="#{evidence.zbDate}">Zero-balance date</th>
+        <th th:text="#{evidence.modFlag}">Modification flag</th></tr></thead>
+      <tbody>
+      <tr th:each="m : ${months}">
+        <td th:text="${#temporals.format(m.monthlyReportingPeriod, 'yyyy-MM')}">2020-06</td>
+        <td th:text="${m.missing} ? #{evidence.missing} : ${m.currentLoanDelinquencyStatus}">0</td>
+        <td th:text="${m.currentActualUpb != null} ? ${#numbers.formatDecimal(m.currentActualUpb, 1, 'COMMA', 2, 'POINT')} : '—'">UPB</td>
+        <td th:text="${m.currentInterestRate}">5.0</td>
+        <td th:text="${m.zeroBalanceCode}">Zero balance code</td><td th:text="${m.zeroBalanceEffectiveDate}">Zero balance date</td><td th:text="${m.modificationFlag}">Modification flag</td>
+      </tr>
+      </tbody>
+    </table>
+  </section>
+
+</div>

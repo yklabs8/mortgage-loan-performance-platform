@@ -1,33 +1,46 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org" lang="en">
-<head th:replace="~{fragments :: head('Review candidates')}"></head>
+<html xmlns:th="http://www.thymeleaf.org" th:lang="${#locale.language == 'en'} ? 'en' : 'zh-CN'">
+<head th:replace="~{fragments :: head(#{candidates.title})}"></head>
 <body>
 <header th:replace="~{fragments :: nav}"></header>
 <main>
-  <h1>Review candidates</h1>
+  <h1 th:text="#{candidates.title}">Review Candidates</h1>
+  <div th:replace="~{fragments :: flash}"></div>
+
   <form th:action="@{/candidates}" method="get" class="row">
-    <label>Loan ID <input type="text" name="loan" th:value="${loan}" maxlength="20" placeholder="e.g. F10Q10000001"></label>
-    <button type="submit">Search</button>
-    <a th:href="@{/candidates}">Show all</a>
+    <label><span th:text="#{candidates.loan}">Loan ID</span> <input type="text" name="loan" th:value="${loan}" maxlength="20" th:placeholder="#{candidates.loanPlaceholder}"></label>
+    <label><span th:text="#{candidates.month}">Reporting month</span> <input type="month" name="month" th:value="${month}"></label>
+    <label><span th:text="#{candidates.size}">Per page</span> <input type="number" name="size" min="1" max="100" th:value="${size}"></label>
+    <button type="submit" th:text="#{candidates.search}">Search</button>
+    <a th:href="@{/candidates}" th:text="#{candidates.showAll}">Show all</a>
   </form>
 
-  <p class="muted" th:if="${#lists.isEmpty(candidates)}">No candidates.</p>
+  <p class="muted" th:if="${#lists.isEmpty(candidates)}" th:text="#{candidates.empty}">No candidates.</p>
   <table th:unless="${#lists.isEmpty(candidates)}">
     <thead>
-    <tr><th>Source</th><th>Loan ID</th><th>Reporting month</th><th>Delinquency status</th><th>Source release</th><th>Rule (version)</th></tr>
+    <tr><th th:text="#{col.source}">Source</th><th th:text="#{col.loan}">Loan ID</th><th th:text="#{col.triggerMonth}">Trigger month</th>
+      <th th:text="#{col.dlqStatus}">Delinquency status</th><th th:text="#{candidates.release}">Data release</th>
+      <th th:text="#{candidates.rule}">Rule (version)</th><th th:text="#{candidates.case}">Case</th></tr>
     </thead>
     <tbody>
     <tr th:each="c : ${candidates}">
       <td th:text="${c.dataSource}">FRE</td>
-      <td th:text="${c.loanIdentifier}">Loan ID</td>
+      <td><a th:href="@{/candidates/{id}(id=${c.candidateId})}" th:text="${c.loanIdentifier}">Loan ID</a></td>
       <td th:text="${#temporals.format(c.reportingMonth, 'yyyy-MM')}">2020-06</td>
       <td th:text="${c.delinquencyStatus}">2</td>
       <td th:text="${c.sourceReleaseId}">R47</td>
-      <td th:text="${c.ruleCode} + ' (v' + ${c.versionNo} + ')'">Rule</td>
+      <td th:text="#{candidates.ruleVersion(${c.ruleCode}, ${'' + c.versionNo})}">Rule</td>
+      <td>
+        <a th:if="${c.caseId != null}" th:href="@{/cases/{id}(id=${c.caseId})}" th:text="${c.caseNumber}">RRC-000001</a>
+        <form th:if="${c.caseId == null}" th:action="@{/candidates/{id}/open(id=${c.candidateId})}" method="post" class="inline">
+          <button type="submit" class="small" th:text="#{candidates.open}">Open case</button>
+        </form>
+      </td>
     </tr>
     </tbody>
   </table>
-  <p class="muted">Shows up to 200 rows, newest reporting month first.</p>
+  <a th:if="${next != null}" th:href="@{/candidates(loan=${loan},month=${month},size=${size},after=${next})}" th:text="#{candidates.next}">Next page</a>
 </main>
+<footer th:replace="~{fragments :: footer}"></footer>
 </body>
 </html>

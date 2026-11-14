@@ -12,3 +12,5 @@ __pycache__/
 .DS_Store
 # Run logs
 logs/
+# Java build output
+app/target/

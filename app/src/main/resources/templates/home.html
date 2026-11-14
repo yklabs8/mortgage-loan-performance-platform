@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:lang="${#locale.language == 'en'} ? 'en' : 'zh-CN'">
+<head th:replace="~{fragments :: head(#{home.title})}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main>
+  <h1 th:text="#{home.heading}">Review workflow</h1>
+  <ol class="flow">
+    <li th:each="i : ${#numbers.sequence(1, 5)}"><b th:text="#{${'home.step' + i + '.name'}}">Step</b><span
+        th:text="#{${'home.step' + i + '.text'}}">Description</span></li>
+  </ol>
+  <p>
+    <a class="button" th:href="@{/candidates}" th:text="#{home.viewCandidates}">View candidates</a>
+    <a class="button" th:href="@{/cases}" th:text="${isManager} ? #{home.viewAllCases} : #{home.viewMyCases}">View cases</a>
+  </p>
+  <p class="muted" th:text="#{home.note}">The server checks the user role and case status for every review action. Opening a case pins the evidence version; later data updates are flagged on the case.</p>
+</main>
+<footer th:replace="~{fragments :: footer}"></footer>
+</body>
+</html>

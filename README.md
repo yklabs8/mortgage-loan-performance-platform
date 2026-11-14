@@ -17,7 +17,7 @@ DIM + DWD (monthly facts) ──► DWS (per-loan summaries) ──► ADS (thre
 review candidates ──► review application (Spring Boot)    Tableau dashboards
 ```
 
-At full scale the processing runs on HDFS/Hive and Spark, and Oracle serves the delivered results and the review application. This repository publishes the Oracle sample warehouse, which is the development and regression reference for the same logic.
+At full scale the processing runs on HDFS/Hive and Spark, and Oracle serves the delivered results and the review application. This repository contains the Oracle sample warehouse, which is the development and regression reference for the same logic, the review application with its OLTP database, change data capture back into the warehouse, and calculation lineage.
 
 ## Components
 
@@ -29,13 +29,13 @@ At full scale the processing runs on HDFS/Hive and Spark, and Oracle serves the 
 | Data quality | Rule results and offending rows are recorded; HARD failures stop the load, invalid loan references and months can be quarantined, warnings are kept. | Done |
 | Release diff and targeted backfill | Compares two releases, finds loans whose history changed, copies unchanged loan summaries, and recomputes only the changed loans. | Done |
 | Data models | Data Modeler enterprise, logical, and relational models with generated DDL (`docs/model/`). | Done |
-| Review candidates and page | Rule-based candidate selection from the warehouse and a read-only Spring Boot candidate page. | Done |
-| Full review workflow and CDC | Analyst/Manager workflow and timestamp-based CDC back to the warehouse; the design is in `docs/oltp_design.md`. | Design done |
-| Large-scale processing | Spark/Hive pipeline, batch delivery to Oracle, and scheduling. | Design done |
+| Review application | Spring Boot pages for analysts and managers: candidate list with evidence, open, assign, note, close, escalate, reopen, monthly report, password change. Roles are checked against the database on every action; a decision made from an outdated page is refused. | Done |
+| Review candidates | Spark applies the review rule to the warehouse sample (local mode here, no cluster) and writes a checked delivery package; the importer merges it into the review database in one transaction and pins each case to the evidence it was opened with. | Done |
+| Change data capture | Timestamp-based extraction of review changes from OLTP into case fact tables with an overlap window for late commits, a user dimension kept as SCD2, and a monthly review report reconciled against OLTP. | Done |
+| Lineage | Each load registers a source batch verified against the archive checksum, the extracted text, and ODS; each DWS/ADS publication records its row count, result digest, input batch, parent calculation, and code version. | Done |
+| Large-scale processing | Spark/Hive pipeline over the full history, batch delivery to Oracle, and scheduling. | In progress |
 | Dashboards — first chart | Cumulative 60+ curve by origination quarter (below). | Done |
-| Dashboards — full set | Tableau dashboards for all three analyses. | Planned |
-
-Components marked Done are in this repository. Those marked Design done are implemented in the full platform and not published here yet.
+| Dashboards — full set | Tableau dashboards for all three analyses. | In progress |
 
 ## Analyses
 
@@ -50,7 +50,10 @@ Each analysis is also split by nine loan attributes such as credit score and loa
 - **Reloads are all-or-nothing.** A file is loaded into a staging table, its row count and content fingerprint are checked, and then it replaces the live partition in one step, so readers never see a half-loaded file.
 - **Corrections recompute only what changed.** Freddie Mac reissues the full history in each release, so a new release is loaded in full and kept beside the previous one. The two are compared loan by loan; summaries of unchanged loans are copied, and only loans whose history changed are recomputed.
 - **Quality gate before loading.** Every rule result and offending row is recorded. Problems that make a whole file suspect, such as an empty file, duplicate keys, or an unknown status code, stop the load. Defects confined to one row, such as a monthly record for an unknown loan or an invalid month, are quarantined and the rest is loaded. The warehouse load refuses a quality check older than the latest source load.
-- **Least privilege.** The web page account can only read three tables; it cannot write or run procedures.
+- **Least privilege.** The web application logs in as its own account, which reads the review tables and one report view, inserts review records, and updates only two case columns and its own password columns. It cannot delete rows, read ODS or the underlying analysis tables, or create objects; a SQL test proves this by logging in as that account.
+- **Safe web input.** All SQL uses bound parameters, all page output is escaped, a Content Security Policy blocks inline scripts, every form carries a CSRF token, and critical decisions need an explicit confirmation checked on the server. Passwords are stored as BCrypt hashes, and five wrong attempts lock an account for 15 minutes.
+- **No lost updates.** Two managers deciding from the same page state cannot both succeed: the service locks the case and compares the state the page showed with the current state before writing.
+- **Change capture that does not miss late commits.** The watermark is the time a run started, and each run re-reads an overlap window; writes are merges, so re-read rows never duplicate. A test proves a late-committed change is missed with no overlap and caught with it.
 
 ## Data models
 
@@ -68,7 +71,7 @@ Cumulative 60+ delinquency by origination quarter (Tableau):
 
 ## Status
 
-Updated at each milestone. As of October 29, 2026, Milestones 1–4 are Done and Milestones 5–6 are In progress. Milestone status covers the full platform, including work not yet published here.
+Updated at each milestone. As of November 14, 2026, Milestones 1–5 are Done and Milestone 6 is In progress.
 
 | # | Milestone | Main deliverables | Target date | Status |
 |---|---|---|---|---|
@@ -76,30 +79,32 @@ Updated at each milestone. As of October 29, 2026, Milestones 1–4 are Done and
 | 2 | Environment, Source Data, and OLTP Design | Oracle in Docker; source data with checksum manifest; data profiling; ODS loaded; OLTP conceptual, logical, and relational design (3NF) | 10/03/2026 | Done |
 | 3 | Thin End-to-End Path | One vintage through every layer: ODS → first fact table with DIM_DATE → one delinquency metric → one Tableau chart; OLTP models in Data Modeler, DDL, core tables; review candidates from the warehouse shown on one web page (Data Modeler models and DDL moved to Milestone 4) | 10/17/2026 | Done |
 | 4 | Thicken the Databases and ETL | OLTP: all tables, indexes, triggers, functions, procedures, sample data, constraint and trigger tests, rule-mapping additions, Data Modeler models and DDL. Warehouse: full star schema with DIM_DATE, Enterprise / Logical / Relational models and DDL; ETL with external tables and PL/SQL; data quality rules and reconciliation; all three analyses | 10/31/2026 | Done |
-| 5 | Thicken the Application and Change Processing | Analyst and Manager pages with menus; role-based grants and password management; validation, confirmations, SQL-injection and XSS protection; timestamp-based CDC from OLTP to the warehouse; release-diff and targeted backfill test case; lineage | 11/14/2026 | In progress |
+| 5 | Thicken the Application and Change Processing | Analyst and Manager pages with menus; role-based grants and password management; validation, confirmations, SQL-injection and XSS protection; timestamp-based CDC from OLTP to the warehouse; release-diff and targeted backfill test case; lineage | 11/14/2026 | Done |
 | 6 | Reports, Scale-up, and Testing | Core: Tableau dashboards for roll-rate, vintage, and payment-modification analysis; Phase 2 Spark scale-up on multiple vintages with benchmark; end-to-end tests. Stretch (only if earlier milestones finish early): full-history Spark run on a multi-node cluster; additional-source comparison | 11/28/2026 | In progress |
 | 7 | Final Deliverables | Final project report; presentation; demo rehearsal and recording | 12/06/2026 | Planned |
 
 ## Repository layout
 
 ```text
-scripts/       Oracle setup, ODS deployment, warehouse loads, external-table loading
-python/        Database access, archive checks, loaders, independent raw-file reconciliation
+scripts/       Oracle setup, ODS deployment, warehouse loads, external-table loading, accounts, web application
+python/        Database access, archive checks, loaders, reconciliation, source-batch verification, candidate export and import
+spark/         Candidate selection and delivery contract; local-mode sample candidate run
 source/ods/    Four source tables, stages, exchange procedure, load-event ledger, external tables
-source/dim/    Date, loan, durable keys, geography, servicer, status/code dimensions, segment view
-source/dwd/    Partitioned monthly fact, exchange stage, release loading, targeted recomputation
+source/dim/    Date, loan, durable keys, geography, servicer, status/code, review rule (SCD2) and review user (SCD2) dimensions
+source/dwd/    Partitioned monthly fact, release loading, targeted recomputation, review case facts and CDC procedure
 source/dws/    Per-loan performance and modification summaries
-source/ads/    Three analyses, five segmented outputs, release-difference tables and procedures
-source/rpt/    Read-only views for the three core analyses
-source/oltp/   Core review tables, candidate rule, and candidate procedure
-source/ops/    Grants for the page account
-app/           Read-only candidate page (Spring Boot)
-checks/        Source/detail quality, issue/quarantine records, freshness gate, object checks
-test/          Database-backed source-loader tests
+source/ads/    Three analyses, five segmented outputs, release-difference tables, monthly review report
+source/rpt/    Read-only report views
+source/oltp/   Review tables, triggers, seed data, candidate delivery tables, reference candidate package
+source/ops/    Account grants, environment marker, run log, source batches, calculation lineage and result history
+source/migrate/ Grant added after the first OLTP release
+app/           Review web application (Spring Boot, Thymeleaf, Spring Security) and its tests
+checks/        Source/detail quality, issue/quarantine records, freshness gate, CDC reconciliation, object checks
+test/          Database tests for loaders, review workflow, CDC, report, dimensions, privileges, candidate import
 docs/          Setup steps, metric definitions, source-field map, review design, manifest, images
 docs/model/    Data Modeler enterprise, logical, and relational diagrams and model-generated DDL
 ```
 
 ## Run it locally
 
-You need Docker, Python 3.11, and one free sample year from the [Freddie Mac Single-Family Loan-Level Dataset](https://www.freddiemac.com/research/datasets/sf-loanlevel-dataset). Step-by-step commands and tests are in `docs/setup.md`; this version was deployed from an empty database schema with those steps.
+You need Docker, Python 3.11, Java 17 with Maven, Apache Spark for one local-mode step, and one free sample year from the [Freddie Mac Single-Family Loan-Level Dataset](https://www.freddiemac.com/research/datasets/sf-loanlevel-dataset). Step-by-step commands and tests are in `docs/setup.md`; this version was deployed from an empty database schema with those steps.

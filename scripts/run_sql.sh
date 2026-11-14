@@ -5,12 +5,13 @@
 #        for example scripts/run_sql.sh source/ods/ods_orig.sql
 #        each "name=value" becomes a sqlplus substitution variable, referenced as &name in the SQL file
 # Requires: database started (0_start_db.sh)
-# Password source: only the private file outside this repository; stop if the account is missing
+# Administration: LOAN_DW_ADMIN=1 ORACLE_USER=sys uses the container's OS authentication; the PDB by default, LOAN_DW_ADMIN_ROOT=1 for whole-database start/stop.
+# Password source: ordinary accounts only from the private file outside this repository; the admin entry never reads or stores a SYS password.
 # Called by: run manually, or by other scripts
 # Note: the password is passed to the database through stdin; it is never shown, written to a file, or put on the command line
 set -euo pipefail  # stop immediately if any step fails
 
-container="${ORACLE_CONTAINER:-oracle-db}"  # container name
+
 db_user="${ORACLE_USER:-loan_dw}"  # database user name
 sql_file="${1:?Usage: $0 <SQL file> [name=value ...]}"  # the SQL file to run; error if missing
 [ -f "$sql_file" ] || { echo "File not found: $sql_file" >&2; exit 1; }  # stop if the file does not exist
@@ -19,11 +20,36 @@ for kv in "$@"; do  # check each argument's format so nothing else slips into th
   [[ "$kv" =~ ^[a-z_]+=[A-Za-z0-9_]+$ ]] || { echo "Bad argument format: $kv" >&2; exit 1; }
 done
 script_dir="$(cd "$(dirname "$0")" && pwd)"
-pw=$("$script_dir/../.venv/bin/python" "$script_dir/../python/password_store.py" "$db_user")
+container=$("$script_dir/../.venv/bin/python" "$script_dir/../python/database_target.py" container)
+target=$("$script_dir/../.venv/bin/python" "$script_dir/../python/database_target.py" target)
+admin="${LOAN_DW_ADMIN:-0}"
+if [ "$admin" = 1 ]; then
+  [ "$db_user" = sys ] || { echo "The admin entry only allows sys" >&2; exit 1; }
+else
+  pw=$("$script_dir/../.venv/bin/python" "$script_dir/../python/password_store.py" "$db_user")
+fi
+repo_dir="$script_dir/.."
+code_commit=""
+if [ -z "$(git -C "$repo_dir" status --porcelain --untracked-files=normal)" ]; then
+  code_commit=$(git -C "$repo_dir" rev-parse HEAD)
+fi
+metric_sha=$(shasum -a 256 "$repo_dir/docs/metric_definitions.md" | cut -d ' ' -f 1)
 
 {  # the lines below are concatenated and passed to sqlplus together
   echo "whenever sqlerror exit sql.sqlcode"  # exit at the first SQL error and return its code
-  echo "connect $db_user/\"$pw\"@//localhost:1521/FREEPDB1"  # log in (this line is not displayed)
+  if [ "$admin" = 1 ]; then
+    echo "connect / as sysdba"
+    echo "set feedback off"
+    if [ "${LOAN_DW_ADMIN_ROOT:-0}" != 1 ]; then echo "alter session set container = FREEPDB1;"; fi
+  else
+    echo "connect $db_user/\"$pw\"@//localhost:1521/FREEPDB1"  # log in (this line is not displayed)
+  fi
+  if [[ "$sql_file" == test/* || "$sql_file" == */test/* || "${LOAN_DW_REQUIRE_TEST:-0}" == "1" ]]; then
+    echo "declare l_environment varchar2(10); begin select environment_name into l_environment from loan_dw.database_environment; if l_environment != 'TEST' then raise_application_error(-20990, 'Write tests require TEST database'); end if; end;"
+    echo "/"
+  fi
+  printf "begin dbms_session.set_identifier('%s'); dbms_application_info.set_client_info('%s'); end;\n/\n" \
+    "$code_commit" "$metric_sha"  # the commit is recorded only when the working tree is clean; the metric file SHA is taken from its actual bytes
   echo "set verify off"  # do not show substitution-variable replacement
   echo "set sqlblanklines on"  # allow blank lines inside a statement (otherwise a blank line ends the statement)
   echo "set pagesize 200 linesize 200 tab off"  # output layout: 200 lines per page, 200 characters per line

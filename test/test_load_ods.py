@@ -16,9 +16,8 @@ import unittest  # Python's built-in test framework
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "python"))
 
 import load_ods  # the loader under test (importable only after the path is set above)
-from db import connect  # database connection
+from db import connect_test_database as connect  # connect to the database (refuses unless it is marked TEST)
 
-# temporary table name: must start with ods_ for load_ods to accept it
 TABLE = "ods_zz_load_test"
 
 
@@ -28,7 +27,6 @@ def run_sql(sql, **binds):  # run one statement and commit
         conn.commit()
 
 
-# row count of the table (optionally for one release only)
 def table_rows(release_id=None):
     with connect() as conn, conn.cursor() as cur:
         if release_id is None:
@@ -68,14 +66,12 @@ class LoadOdsTest(unittest.TestCase):
             f.write("".join(line + "\n" for line in lines))
         return path
 
-    # normal load; rerunning the same file does not double the rows
     def test_normal_and_rerun_not_doubled(self):
         path = self.write("a.txt", ["x|1", "y|2", "z|3"])
         self.assertEqual(load_ods.load("R99", TABLE, path), 3)
         self.assertEqual(load_ods.load("R99", TABLE, path), 3)
         self.assertEqual(table_rows(), 3)
 
-    # another file of the same release is not affected
     def test_other_file_same_release_kept(self):
         load_ods.load("R99", TABLE, self.write("a.txt", ["x|1", "y|2"]))
         load_ods.load("R99", TABLE, self.write("b.txt", ["z|3"]))
@@ -83,7 +79,6 @@ class LoadOdsTest(unittest.TestCase):
         load_ods.load("R99", TABLE, self.write("a.txt", ["x|1"]))
         self.assertEqual(table_rows("R99"), 2)  # 1 row from a.txt + 1 row from b.txt
 
-    # empty file: error, old data is kept
     def test_empty_file_fails_and_keeps_old_data(self):
         path = self.write("a.txt", ["x|1", "y|2"])
         load_ods.load("R99", TABLE, path)
@@ -97,14 +92,12 @@ class LoadOdsTest(unittest.TestCase):
             load_ods.load("R99", TABLE, os.path.join(self.tmp.name, "none.txt"))
         self.assertEqual(table_rows(), 0)
 
-    # line 3 has the wrong column count: error, no rows kept
     def test_wrong_column_count_fails(self):
         path = self.write("a.txt", ["x|1", "y|2", "z|3|extra"])
         with self.assertRaisesRegex(ValueError, "Line 3 "):
             load_ods.load("R99", TABLE, path)
         self.assertEqual(table_rows(), 0)
 
-    # a value too long in the last batch: error, whole batch rolled back
     def test_bad_value_in_last_batch_fails(self):
         original = load_ods.BATCH_SIZE
         load_ods.BATCH_SIZE = 2  # 2 rows per batch, so line 5 falls into the last batch
@@ -116,7 +109,6 @@ class LoadOdsTest(unittest.TestCase):
             load_ods.BATCH_SIZE = original
         self.assertEqual(table_rows(), 0)
 
-    # table name does not start with ods_: error, no other table is touched
     def test_bad_table_name_fails(self):
         path = self.write("a.txt", ["x|1"])
         with self.assertRaises(ValueError):
@@ -125,3 +117,10 @@ class LoadOdsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def setUpModule():
+    """Before any fixture or failure cleanup in this module, verify the real database environment."""
+    from db import connect_test_database
+
+    connect_test_database().close()

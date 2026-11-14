@@ -1,0 +1,10 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:lang="${#locale.language == 'en'} ? 'en' : 'zh-CN'">
+<head th:replace="~{fragments :: head(#{candidate.title})}"></head><body>
+<header th:replace="~{fragments :: nav}"></header><main>
+<h1 th:text="#{candidate.heading(${c.loanIdentifier})}"></h1>
+<div th:replace="~{evidence :: evidence}"></div>
+<form th:if="${c.caseId == null}" th:action="@{/candidates/{id}/open(id=${c.candidateId})}" method="post"><button type="submit" th:text="#{candidates.open}">Open case</button></form>
+<a th:if="${c.caseId != null}" th:href="@{/cases/{id}(id=${c.caseId})}" th:text="#{candidate.viewCase}">View case</a>
+</main>
+<footer th:replace="~{fragments :: footer}"></footer></body></html>
