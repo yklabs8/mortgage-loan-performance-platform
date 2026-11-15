@@ -5,7 +5,7 @@
 --          matches the source file.
 --          Row hash: each column written as "length:value" (null written as ~), concatenated, first 60 bits of SHA-256
 -- Requires: ODS tables created
--- Called by: python/load_ods.py, source/ods/ods_exchange_file.sql
+-- Called by: source/ods/load_ods_from_ext.sql, source/ods/ods_exchange_file.sql
 
 create or replace function ods_file_hash(
    in_table in varchar2

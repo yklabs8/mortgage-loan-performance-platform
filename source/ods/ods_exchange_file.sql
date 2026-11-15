@@ -3,7 +3,7 @@
 --          original cross-file unique primary key.
 -- Usage: scripts/run_sql.sh source/ods/ods_exchange_file.sql
 -- Requires: the four partitioned ODS tables, their staging tables, function ods_file_hash
--- Called by: python/load_ods.py
+-- Called by: source/ods/load_ods_from_ext.sql
 -- Note: split and exchange are DDL and commit automatically. On failure the staging table is not cleaned up;
 --       find out the state first, then recover.
 

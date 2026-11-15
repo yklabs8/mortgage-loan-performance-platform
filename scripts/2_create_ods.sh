@@ -1,19 +1,15 @@
 #!/usr/bin/env bash
-# Name: 2_create_ods.sh
-# Purpose: create the four partitioned ODS tables, their exchange staging tables, the fingerprint
-#          function ods_file_hash, successful-load event ledger, and the partition-exchange procedure ods_exchange_file
-# Usage: scripts/2_create_ods.sh (run from the repository root)
-# Requires: database started (0_start_db.sh); platform database user created (1_create_db_user.sh); password available as in step 3 of docs/setup.md
-# Called by: run manually, once, when deploying from scratch
-set -euo pipefail  # stop immediately if any step fails
-
-cd "$(dirname "$0")/.."  # go to the repository root; all paths below are relative to it
-for table in ods_orig ods_perf ods_orig_pre202607 ods_perf_pre202607; do  # two tables for each of the two file layouts
+# Name: 2_create_ods.sh; purpose: deploy ODS tables, exchange stages and the external-table loader from scratch.
+# Usage: scripts/2_create_ods.sh; requires the database and platform account; called by the operator.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+scripts/3_create_ext_dir.sh
+for table in ods_orig ods_perf ods_orig_pre202607 ods_perf_pre202607; do
   scripts/run_sql.sh "source/ods/$table.sql"
 done
-scripts/run_sql.sh source/ods/ods_load_event.sql  # record successful source-file loads
-scripts/run_sql.sh source/ods/ods_exchange_stages.sql  # staging tables (load here first, swap in after checking)
-scripts/run_sql.sh checks/ods_file_hash.sql  # fingerprint of one release + one source file
-scripts/run_sql.sh source/ods/ods_exchange_file.sql  # check the fingerprint, then swap staging table and partition
-scripts/run_sql.sh checks/check_invalid_objects.sql  # fail if any schema object remains invalid after compilation
-echo "ODS objects created"  # success message
+for file in source/ods/ods_exchange_stages.sql source/ods/ods_load_event.sql \
+  checks/ods_file_hash.sql source/ods/ods_exchange_file.sql \
+  source/ods/ext_ods_tables.sql \
+  source/ods/load_ods_from_ext.sql checks/check_invalid_objects.sql; do
+  scripts/run_sql.sh "$file"
+done

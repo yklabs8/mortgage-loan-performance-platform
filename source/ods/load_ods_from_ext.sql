@@ -1,12 +1,16 @@
--- load_ods_from_ext.sql
--- Validate identifiers, filenames, column counts and nonempty input before loading. Fill and fingerprint the exchange stage first; preserve the current partition on failure before exchange. A nonempty stage requires investigation. Nonpartitioned fixtures use transactional replacement.
+-- Name: load_ods_from_ext.sql
+-- Purpose: Oracle validates column and row counts, loads raw text into staging, then exchanges the file partition into ODS.
+-- Requires: matching ext_ table, ext_ods_raw_line, stage, ods_file_hash and ods_exchange_file.
+-- Called by: scripts/4_load_ods_ext.sh after copying the source into ODS_EXT_DIR.
+
 create or replace procedure load_ods_from_ext(
    in_release_id in varchar2
    , in_table in varchar2
    , in_file_name in varchar2
 ) is
    l_table varchar2(30);
-   l_ext_table varchar2(30);
+   l_ext_table varchar2(128);
+   l_external_count pls_integer;
    l_columns varchar2(4000);
    l_column_count pls_integer;
    l_file_rows pls_integer;
@@ -18,9 +22,16 @@ create or replace procedure load_ods_from_ext(
    l_stage_rows pls_integer;
    l_stage_hash varchar2(100);
 begin
+   -- Require a safe ods_ identifier and a matching ext_ external table.
    l_table := lower(in_table);
-   if l_table not in ('ods_orig', 'ods_perf') then
-      raise_application_error(-20021, 'Only ods_orig and ods_perf are supported: ' || in_table);
+   if l_table is null or not regexp_like(l_table, '^ods_[a-z0-9_]+$') then
+      raise_application_error(-20021, 'Invalid ODS table name: ' || in_table);
+   end if;
+   select count(*) into l_external_count
+   from user_external_tables
+   where table_name = upper('ext_' || l_table);
+   if l_external_count != 1 then
+      raise_application_error(-20021, 'No matching external table: ' || in_table);
    end if;
    if not regexp_like(in_file_name, '^[A-Za-z0-9_.]+$') then
       raise_application_error(-20022, 'Invalid filename: ' || in_file_name);
@@ -34,6 +45,7 @@ begin
    from user_tables
    where table_name = upper(l_table);
 
+   -- Select data columns in table order, excluding release_id and source_file.
    select
       listagg(lower(column_name), ', ') within group (
          order by column_id
@@ -45,6 +57,7 @@ begin
       table_name = upper(l_table)
       and column_name not in ('RELEASE_ID', 'SOURCE_FILE');
 
+   -- Point both external tables at this file; location DDL commits before any data changes.
    execute immediate
       'alter table ext_ods_raw_line location ('
       || dbms_assert.enquote_literal(in_file_name) || ')';
@@ -52,6 +65,7 @@ begin
       'alter table ' || dbms_assert.simple_sql_name(l_ext_table)
       || ' location (' || dbms_assert.enquote_literal(in_file_name) || ')';
 
+   -- Validate row and column counts: require column_count - 1 separators per line, including empty lines.
    select
       count(*) as file_rows
       , count(
@@ -105,6 +119,7 @@ begin
    end if;
    l_inserted := sql%rowcount;
 
+   -- Reconcile inserted rows against the source row count.
    if l_inserted != l_file_rows then
       raise_application_error(
          -20026

@@ -107,4 +107,4 @@ docs/model/    Data Modeler enterprise, logical, and relational diagrams and mod
 
 ## Run it locally
 
-You need Docker, Python 3.11, Java 17 with Maven, Apache Spark for one local-mode step, and one free sample year from the [Freddie Mac Single-Family Loan-Level Dataset](https://www.freddiemac.com/research/datasets/sf-loanlevel-dataset). Step-by-step commands and tests are in `docs/setup.md`; this version was deployed from an empty database schema with those steps.
+You need Docker, Python 3.11, Java 17 with Maven, Apache Spark for one local-mode step, and one free sample year from the [Freddie Mac Single-Family Loan-Level Dataset](https://www.freddiemac.com/research/datasets/sf-loanlevel-dataset). ODS loading uses Oracle external tables for both supported file layouts. Step-by-step commands and tests are in `docs/setup.md`; this version was deployed from an empty database schema with those steps.

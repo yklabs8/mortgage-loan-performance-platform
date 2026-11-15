@@ -27,7 +27,7 @@ Run these commands from the repository root in a bash shell. You need Docker and
    scripts/1_create_db_user.sh loan_dw
    ```
 
-3. Create the Python environment and the four ODS tables, staging tables, fingerprint function, and exchange procedure. Deploy once to a new schema.
+3. Create the Python environment and deploy the four ODS tables, staging tables, directory grant, external tables, fingerprint function, and external loader. Deploy once to a new schema.
 
    ```bash
    python3.11 -m venv .venv
@@ -66,15 +66,15 @@ Run these commands from the repository root in a bash shell. You need Docker and
    .venv/bin/python python/profile_sample.py "$EXTRACT_DIR/sample_orig_$YEAR.txt" /path/to/origination_data_file_header.txt "$EXTRACT_DIR/sample_perf_$YEAR.txt" /path/to/performance_data_file_header.txt
    ```
 
-7. Load both files, then gather Oracle optimizer statistics. For the earlier layout, change `ods_orig` to `ods_orig_pre202607`, change `ods_perf` to `ods_perf_pre202607`, and load `sample_svcg_YYYY.txt` as the performance file. The `RELEASE` label must match the archive you extracted. Rerunning a successful load for the same release and filename replaces that file's partition.
+7. Load both files through Oracle external tables, then gather optimizer statistics. Step 3's `scripts/2_create_ods.sh` creates `/opt/oracle/ext_data`, grants the ODS directory, and deploys the external tables and loader. For the earlier layout, use `ods_orig_pre202607`, `ods_perf_pre202607`, and `sample_svcg_YYYY.txt`. The `RELEASE` label must match the extracted archive. A successful rerun replaces only that release and filename's partition.
 
    ```bash
-   .venv/bin/python python/load_ods.py "$RELEASE" ods_orig "$EXTRACT_DIR/sample_orig_$YEAR.txt"
-   .venv/bin/python python/load_ods.py "$RELEASE" ods_perf "$EXTRACT_DIR/sample_perf_$YEAR.txt"
+   scripts/4_load_ods_ext.sh "$RELEASE" ods_orig "$EXTRACT_DIR/sample_orig_$YEAR.txt"
+   scripts/4_load_ods_ext.sh "$RELEASE" ods_perf "$EXTRACT_DIR/sample_perf_$YEAR.txt"
    scripts/run_sql.sh source/ods/gather_ods_stats.sql
    ```
 
-The loader checks the number of rows in its staging table and compares fingerprints before and after partition exchange.
+   The shell script copies each file into the Oracle container and removes that copy on exit. Oracle validates the file's column and row counts, loads the exchange stage, and compares its fingerprint before and after partition exchange. The old-layout external tables are deployed from the same `source/ods/ext_ods_tables.sql` file.
 
 8. Create the review accounts and every remaining object: dimensions, facts, summaries, analyses, the review (OLTP) database, change data capture, and lineage. Save the three account passwords first. The script deploys each file as its owner in dependency order, marks this database as a TEST environment (the write tests refuse to run anywhere else, so use a development database), grows the USERS tablespace file to 4 GB if smaller, creates the least-privilege web account `loan_app`, and finishes with a SQL test that logs in as that account. Run it once on a new database.
 
@@ -113,7 +113,6 @@ The loader checks the number of rows in its staging table and compares fingerpri
    .venv/bin/python python/reconcile_segment.py "$RELEASE" "$EXTRACT_DIR/sample_orig_$YEAR.txt" "$ORIG_HEADER" "$EXTRACT_DIR/sample_perf_$YEAR.txt" "$PERF_HEADER" "$CENSUS_DIR"
    ```
 
-   Optional newer-layout external-table loading: run `scripts/3_create_ext_dir.sh` as an administrator to create the directory grant, then deploy `source/ods/ext_ods_tables.sql` and `source/ods/load_ods_from_ext.sql` through `scripts/run_sql.sh`. Run `checks/check_invalid_objects.sql` afterward. `scripts/4_load_ods_ext.sh "$RELEASE" ods_perf "$EXTRACT_DIR/sample_perf_$YEAR.txt" --compare` replaces that file and checks its fingerprint against the existing Python load. Rerun the quality check afterward.
 
    For release comparison, fully load both releases first, then run `scripts/run_sql.sh source/ads/run_compare_releases.sql old_release=OLD new_release=NEW`. To load a corrected release using a baseline, run `scripts/2_load_dw_release.sh NEW OLD`. Unchanged loan summaries are copied; affected loans are recomputed. Without a baseline the loader recomputes everything. `python/reconcile_loan_bands.py` is an additional check expecting all three releases R45, R46, and R47.
 
@@ -152,6 +151,24 @@ The loader checks the number of rows in its staging table and compares fingerpri
 
 The tests write data and roll it back, so they run only on a database marked TEST (step 8). Run step 11's rule sync and extraction once before the SQL tests, so the rule and user dimensions are populated.
 
+For all three 2010 samples (R47, R45, and R46), the 4 GiB initial USERS file is insufficient: the loaded warehouse occupies about 4,041 MiB before candidate import. Before loading the two additional releases, an administrator must provide a USERS file of at least 5 GiB. The candidate importer continues to require at least 500 MiB free and keeps its 160 MiB candidate budget. On this fresh development database, run the following through the container's SQL*Plus administrator session in `FREEPDB1`:
+
+```sql
+whenever sqlerror exit failure rollback
+declare
+   l_file varchar2(1000);
+   l_bytes number;
+begin
+   select file_name, bytes into l_file, l_bytes
+   from dba_data_files where tablespace_name = 'USERS';
+   if l_bytes < 5368709120 then
+      execute immediate 'alter database datafile '
+         || dbms_assert.enquote_literal(l_file) || ' resize 5g';
+   end if;
+end;
+/
+```
+
 Python tests (ODS loading and exchange, candidate delivery contract, candidate import, release comparison and targeted recomputation). `test/test_targeted_baseline.py` needs releases R45 and R46 of the same origination year fully loaded (step 9 for each): it checks that a targeted recomputation of R46 from the R45 baseline gives exactly the same DWS and ADS rows as the full load, that a release with no state transitions completes, and that a baseline with a missing modification summary is rejected before any target data changes:
 
 ```bash
@@ -164,7 +181,7 @@ Web application tests (security requirements, full workflow from candidate to mo
 scripts/12_run_app.sh test
 ```
 
-SQL tests. The five suites below use [utPLSQL](https://github.com/utPLSQL/utPLSQL) v3.2.3, installed into the database with grants for `loan_dw`, `loan_oltp`, and `loan_test`; each file is deployed first and then run:
+SQL tests. The five suites below use [utPLSQL](https://github.com/utPLSQL/utPLSQL) v3.2.3, installed into the database with grants for `loan_dw`, `loan_oltp`, and `loan_test`; each file is deployed first and then run. The framework installation must also grant `create procedure` to `loan_test`, so this dedicated test account can compile its own test packages. Run `grant create procedure to loan_test;` as an administrator in `FREEPDB1` before deploying the suites:
 
 ```bash
 ORACLE_USER=loan_oltp scripts/run_sql.sh test/test_review_workflow.sql
