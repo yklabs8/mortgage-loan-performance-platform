@@ -1,10 +1,19 @@
-"""Oracle candidate import acceptance; random business keys, cleaning only objects created by each case."""
+"""Oracle candidate selection and publication acceptance; runs only on a database marked TEST.
+
+CandidatePublicationTest replaces the staged rows with one made-up loan (random business key) and cleans only what each case created.
+CandidateSelectionTest applies the rule to the loaded warehouse for one month and compares it with an independent count.
+"""
 
 import sys
 import unittest
+from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
+
+MONTH = "2020-06-01"
+RELEASE = "R47"
 
 
 class CandidateImportSchemaTest(unittest.TestCase):
@@ -20,6 +29,29 @@ class CandidateImportSchemaTest(unittest.TestCase):
                     n=name.upper(),
                 )
                 self.assertEqual(cur.fetchone()[0], 1, name)
+            cur.execute(
+                "select status from user_objects where object_name='CANDIDATE_PUBLISH' and object_type='PACKAGE BODY'"
+            )
+            self.assertEqual(cur.fetchone(), ("VALID",))
+
+
+def clean_candidates(cur, where, **binds):
+    cur.execute(f"select candidate_id from review_candidate where {where}", binds)
+    for (cid,) in cur.fetchall():
+        cur.execute("select case_id from risk_review_case where candidate_id=:c", c=cid)
+        for (case_id,) in cur.fetchall():
+            cur.execute("delete from case_status_history where case_id=:c", c=case_id)
+            cur.execute("delete from risk_review_case where case_id=:c", c=case_id)
+        cur.execute(
+            "update review_candidate set latest_evidence_id=null where candidate_id=:c",
+            c=cid,
+        )
+        cur.execute(
+            "delete from review_evidence_month where evidence_id in (select evidence_id from review_evidence where candidate_id=:c)",
+            c=cid,
+        )
+        cur.execute("delete from review_evidence where candidate_id=:c", c=cid)
+        cur.execute("delete from review_candidate where candidate_id=:c", c=cid)
 
 
 class CandidatePublicationTest(unittest.TestCase):
@@ -38,139 +70,81 @@ class CandidatePublicationTest(unittest.TestCase):
 
     def clean(self):
         with self.p.connection() as conn, conn.cursor() as cur:
-            cur.execute(
-                "select candidate_id from review_candidate where loan_identifier=:l",
-                l=self.loan,
-            )
-            ids = [r[0] for r in cur.fetchall()]
-            for cid in ids:
-                cur.execute(
-                    "select case_id from risk_review_case where candidate_id=:c", c=cid
-                )
-                for (case_id,) in cur.fetchall():
-                    cur.execute(
-                        "delete from case_status_history where case_id=:c", c=case_id
-                    )
-                    cur.execute(
-                        "delete from risk_review_case where case_id=:c", c=case_id
-                    )
-                cur.execute(
-                    "update review_candidate set latest_evidence_id=null where candidate_id=:c",
-                    c=cid,
-                )
-                cur.execute(
-                    "delete from review_evidence_month where evidence_id in (select evidence_id from review_evidence where candidate_id=:c)",
-                    c=cid,
-                )
-                cur.execute("delete from review_evidence where candidate_id=:c", c=cid)
-                cur.execute("delete from review_candidate where candidate_id=:c", c=cid)
-            for d in self.deliveries:
+            clean_candidates(cur, "loan_identifier=:l", l=self.loan)
+            for d in set(self.deliveries):
                 cur.execute(
                     "delete from review_candidate_delivery where delivery_id=:d",
                     d=bytes.fromhex(d),
                 )
             conn.commit()
-            for t in self.p.BUSINESS_TABLES[3:]:
-                cur.execute(f"select count(*) from {t}")
-                self.assertEqual(cur.fetchone()[0], 0)
 
-    def package(self, amount="123.45678901", zero=False, rule_change=None, mutate=None):
-        import csv
-        import tempfile
+    def restage(self, amount="123.450", status="02", previous=None, tamper=None):
+        """Replace what stage_month staged with one made-up candidate, then seal it (tamper runs after sealing)."""
 
-        import candidate_contract as c
-        from delivery_contract import DQ_COLUMNS, REQUIRED_RULES
-        from export_candidate_rule import select_rule
-
-        with self.p.connection() as conn, conn.cursor() as cur:
-            rule = select_rule(cur, "2020-06-01")
-        if rule_change:
-            rule.update(rule_change)
-        temp = tempfile.TemporaryDirectory()
-        self.addCleanup(temp.cleanup)
-        folder = Path(temp.name)
-        base = {
-            "rule_version_id": str(rule["rule_version_id"]),
-            "data_source": "FRE",
-            "loan_identifier": self.loan,
-            "reporting_month": "2020-06-01",
-        }
-        candidate = {**base, "delinquency_status": "02", "source_release_id": "R47"}
-        row = {k: "" for k in c.CANDIDATE_COLUMNS["review_evidence"]}
-        row.update(base)
-        row.update(
-            source_release_id="R47",
-            rule_code=rule["rule_code"],
-            version_no=str(rule["version_no"]),
-            min_delinquency_status=str(rule["min_delinquency_status"]),
-            classic_fico="700.00000000",
-            original_upb="100000.00000000",
-            original_loan_to_value_ltv="80.00000000",
-            original_interest_rate="4.00000000",
-            property_state="NY",
-            origination_year="2010",
-            first_payment_date="2010-06-01",
-            current_loan_delinquency_status="02",
-            current_actual_upb=amount,
-            current_interest_rate="3.25000000",
-            previous_month_missing="true",
-            missing_months="|".join(
+        def run(cur, _text):
+            rule = self.p.select_rule(cur, MONTH)
+            for t in ["review_evidence_month", "review_evidence", "review_candidate"]:
+                cur.execute(f"delete from {t}_stage")
+            key = {
+                "r": rule["rule_version_id"],
+                "l": self.loan,
+                "m": datetime.fromisoformat(MONTH),
+            }
+            cur.execute(
+                "insert into review_candidate_stage values (:r,'FRE',:l,:m,:s,'R47')",
+                **key,
+                s=status,
+            )
+            months = [(MONTH, status, Decimal(amount))]
+            if previous:
+                months.append(("2020-05-01", previous, Decimal("99.000")))
+            for period, code, upb in months:
+                cur.execute(
+                    """insert into review_evidence_month_stage values
+                    (:r,'FRE',:l,:m,:p,:s,:u,3.25,null,null,null)""",
+                    **key,
+                    p=datetime.fromisoformat(period),
+                    s=code,
+                    u=upb,
+                )
+            missing = [
                 f"{y}-{m:02d}-01"
                 for y, m in [(2019, m) for m in range(6, 13)]
                 + [(2020, m) for m in range(1, 6)]
-            ),
+                if not (previous and (y, m) == (2020, 5))
+            ]
+            cur.execute(
+                """insert into review_evidence_stage (rule_version_id,data_source,loan_identifier,reporting_month,
+                source_release_id,rule_code,version_no,min_delinquency_status,classic_fico,original_upb,
+                original_loan_to_value_ltv,original_interest_rate,property_state,origination_year,first_payment_date,
+                current_loan_delinquency_status,current_actual_upb,current_interest_rate,previous_delinquency_status,
+                previous_month_missing,missing_months)
+                values (:r,'FRE',:l,:m,'R47',:code,:v,:t,700,100000,80,4,'NY',2010,date '2010-06-01',:s,:u,3.25,:prev,:pm,:mm)""",
+                **key,
+                code=rule["rule_code"],
+                v=rule["version_no"],
+                t=rule["min_delinquency_status"],
+                s=status,
+                u=Decimal(amount),
+                prev=previous,
+                pm="false" if previous else "true",
+                mm="|".join(missing),
+            )
+            text = self.p.seal(cur, RELEASE, MONTH, rule["rule_version_id"])
+            if tamper:
+                tamper(cur)
+            import hashlib
+
+            self.deliveries.append(hashlib.sha256(text.encode()).hexdigest()[:32])
+            return text
+
+        return run
+
+    def publish(self, **kwargs):
+        after_merge = kwargs.pop("after_merge", lambda _t: None)
+        return self.p.publish(
+            RELEASE, MONTH, after_merge=after_merge, restage=self.restage(**kwargs)
         )
-        monthly = {
-            k: row.get(k, "") for k in c.CANDIDATE_COLUMNS["review_evidence_month"]
-        }
-        monthly["monthly_reporting_period"] = "2020-06-01"
-        row["content_sha256"] = self.p.content_digest(row, [monthly])
-        data = {
-            "review_candidate": [candidate],
-            "review_evidence": [row],
-            "review_evidence_month": [monthly],
-        }
-        if mutate:
-            mutate(data)
-        for t, cols in c.CANDIDATE_COLUMNS.items():
-            (folder / t).mkdir()
-            with (folder / t / "part-000.csv").open("w", newline="") as f:
-                w = csv.DictWriter(f, fieldnames=cols)
-                w.writeheader()
-                if not zero:
-                    w.writerows(data[t])
-        with (folder / "dq_check_result.csv").open("w", newline="") as f:
-            w = csv.writer(f)
-            w.writerow(DQ_COLUMNS)
-            for r in REQUIRED_RULES:
-                w.writerow(
-                    [
-                        r,
-                        "ODS",
-                        "WARN"
-                        if r in {"DQ004B", "DQ007B", "DQ008", "DQ009"}
-                        else "HARD",
-                        1,
-                        0,
-                        "PASS",
-                        "2026-10-19T00:00:00Z",
-                        2010,
-                    ]
-                )
-        m = c.build_candidate_manifest(
-            folder,
-            "sample",
-            "R47",
-            [2010],
-            "a" * 40,
-            False,
-            rule,
-            "2020-06-01",
-            "b" * 32,
-            "c" * 64,
-        )
-        self.deliveries.append(m["delivery_id"])
-        return folder
 
     def snapshot(self):
         result = {}
@@ -193,22 +167,19 @@ class CandidatePublicationTest(unittest.TestCase):
             )
             return cur.fetchone()
 
-    def test_repeat_and_same_content_new_delivery(self):
-        folder = self.package()
-        self.p.publish(folder)
+    def test_repeat_is_a_no_op(self):
+        first = self.publish()
         before = self.snapshot()
-        self.p.publish(folder)
+        self.assertEqual(self.publish(), first)
         self.assertEqual(self.snapshot(), before)
-        second = self.package()
-        self.p.publish(second)
-        self.assertEqual(self.snapshot(), before)
-        self.assertEqual(self.status(self.deliveries[-1]), ("PUBLISHED", None))
+        self.assertEqual(self.status(first), ("PUBLISHED", None))
+        self.assertEqual(before["candidate"][0][1], "DW")
         self.assertEqual(
             [len(before[k]) for k in ["candidate", "evidence", "month"]], [1, 1, 1]
         )
 
     def test_new_evidence_keeps_case_reference(self):
-        self.p.publish(self.package())
+        self.publish()
         before = self.snapshot()
         cid, _, old_evidence, *_ = before["candidate"][0]
         with self.p.connection() as conn, conn.cursor() as cur:
@@ -222,55 +193,51 @@ class CandidatePublicationTest(unittest.TestCase):
                 e=old_evidence,
             )
             conn.commit()
-        self.p.publish(self.package(amount="0.00000000"))
+        self.publish(amount="0", previous="01")
         after = self.snapshot()
         self.assertEqual(after["candidate"][0][0], cid)
         self.assertNotEqual(after["candidate"][0][2], old_evidence)
         self.assertEqual(after["case"][0][1], old_evidence)
         self.assertEqual(
-            [len(after[k]) for k in ["candidate", "evidence", "month"]], [1, 2, 2]
+            [len(after[k]) for k in ["candidate", "evidence", "month"]], [1, 2, 3]
         )
 
     def test_month_merge_failure_rolls_back_everything_and_retry(self):
-        self.p.publish(self.package())
+        self.publish()
         before = self.snapshot()
-        folder = self.package(amount="42.00000000")
 
         def fail(table):
             if table == "review_evidence_month":
                 raise RuntimeError("deliberate failure while merging monthly evidence")
 
         with self.assertRaisesRegex(RuntimeError, "monthly evidence"):
-            self.p.publish(folder, after_merge=fail)
+            self.publish(amount="42", after_merge=fail)
         self.assertEqual(self.snapshot(), before)
         state, error = self.status(self.deliveries[-1])
         self.assertEqual(state, "FAILED")
         self.assertIn("monthly evidence", error)
-        self.p.publish(folder)
+        self.publish(amount="42")
+        self.assertEqual(self.status(self.deliveries[-1]), ("PUBLISHED", None))
         self.assertEqual(len(self.snapshot()["evidence"]), 2)
 
-    def test_database_rule_mismatch(self):
-        for change in [
-            {"min_delinquency_status": 3},
-            {"version_no": 99},
-            {"rule_version_id": 999999},
-        ]:
-            folder = self.package(rule_change=change)
-            with self.assertRaisesRegex(ValueError, "rule version or threshold"):
-                self.p.publish(folder)
-            self.assertEqual(self.snapshot()["candidate"], [])
-            self.assertEqual(self.status(self.deliveries[-1])[0], "FAILED")
-
     def test_zero_candidates_published(self):
-        self.p.publish(self.package(zero=True))
+        def empty(cur, _text):
+            rule = self.p.select_rule(cur, MONTH)
+            for t in ["review_evidence_month", "review_evidence", "review_candidate"]:
+                cur.execute(f"delete from {t}_stage")
+            text = self.p.seal(cur, RELEASE, MONTH, rule["rule_version_id"])
+            import hashlib
+
+            self.deliveries.append(hashlib.sha256(text.encode()).hexdigest()[:32])
+            return text
+
+        self.p.publish(RELEASE, MONTH, restage=empty)
         self.assertEqual(self.status(self.deliveries[-1]), ("PUBLISHED", None))
         self.assertTrue(all(not v for v in self.snapshot().values()))
 
-    def test_existing_sample_identity_business_fields_preserved(self):
-        from export_candidate_rule import select_rule
-
+    def test_existing_reference_candidate_keeps_identity_and_business_fields(self):
         with self.p.connection() as conn, conn.cursor() as cur:
-            rule = select_rule(cur, "2020-06-01")
+            rule = self.p.select_rule(cur, MONTH)
             cur.execute(
                 "insert into review_candidate (rule_version_id,data_source,loan_identifier,reporting_month,delinquency_status,source_release_id) values (:r,'FRE',:l,date '2020-06-01','03','R46')",
                 r=rule["rule_version_id"],
@@ -278,28 +245,31 @@ class CandidatePublicationTest(unittest.TestCase):
             )
             conn.commit()
         before = self.snapshot()["candidate"][0]
-        self.p.publish(self.package())
+        self.publish()
         after = self.snapshot()["candidate"][0]
         self.assertEqual(after[0], before[0])
-        self.assertEqual(after[1], "SPARK")
+        self.assertEqual(after[1], "DW")
         self.assertEqual(after[3:], before[3:])
 
-    def test_business_tampering_rejected_even_with_new_file_hash(self):
+    def test_tampering_after_sealing_is_rejected(self):
         cases = [
-            lambda d: d["review_evidence"][0].update(content_sha256="0" * 64),
-            lambda d: d["review_evidence_month"][0].update(current_actual_upb="99"),
-            lambda d: d["review_evidence_month"][0].update(
-                monthly_reporting_period="2019-01-01"
-            ),
-            lambda d: d["review_candidate"][0].update(loan_identifier="T00000000000"),
-            lambda d: d["review_evidence"][0].update(previous_month_missing="false"),
+            "update review_evidence_stage set content_sha256=lpad('0',64,'0')",
+            "update review_evidence_month_stage set current_actual_upb=99",
+            "update review_evidence_month_stage set monthly_reporting_period=date '2019-01-01'",
+            "update review_candidate_stage set delinquency_status='03'",
+            "update review_evidence_stage set previous_month_missing='false'",
+            "update review_evidence_stage set origination_year=2011",
         ]
-        for mutate in cases:
-            folder = self.package(mutate=mutate)
-            with self.assertRaises(ValueError):
-                self.p.publish(folder)
+        for sql in cases:
+            with self.subTest(sql=sql), self.assertRaises(ValueError):
+                self.publish(tamper=lambda cur, sql=sql: cur.execute(sql))
             self.assertFalse(self.snapshot()["candidate"])
             self.assertEqual(self.status(self.deliveries[-1])[0], "FAILED")
+
+    def test_candidate_below_threshold_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "does not satisfy the rule"):
+            self.publish(status="01")
+        self.assertFalse(self.snapshot()["candidate"])
 
     def test_space_guard_rejects_without_writes(self):
         with (
@@ -310,63 +280,15 @@ class CandidatePublicationTest(unittest.TestCase):
             self.p.guard(cur, 161 * self.p.MIB)
         self.assertFalse(self.snapshot()["candidate"])
 
-    def test_two_independent_importers_keep_publication_immutable(self):
+    def test_two_independent_runs_publish_once(self):
         import threading
+        import time
         from concurrent.futures import ThreadPoolExecutor
         from unittest.mock import patch
 
-        folder = self.package()
         written = threading.Event()
         release = threading.Event()
-        second_attempt = threading.Event()
         callbacks = []
-        real_connection = self.p.connection
-
-        class Cursor:
-            def __init__(self, cur):
-                self.cur = cur
-
-            def __getattr__(self, name):
-                return getattr(self.cur, name)
-
-            def __setattr__(self, name, value):
-                if name == "cur":
-                    object.__setattr__(self, name, value)
-                else:
-                    setattr(self.cur, name, value)
-
-            def __enter__(self):
-                self.cur.__enter__()
-                return self
-
-            def __exit__(self, *args):
-                return self.cur.__exit__(*args)
-
-            def execute(self, sql, *args, **kwargs):
-                second = threading.current_thread().name.endswith("_1")
-                if second and "review_candidate_import_lock" in sql:
-                    second_attempt.set()
-                result = self.cur.execute(sql, *args, **kwargs)
-                if second and "select status,manifest_sha256" in sql:
-                    second_attempt.set()
-                return result
-
-        class Conn:
-            def __init__(self):
-                self.conn = real_connection()
-
-            def __getattr__(self, name):
-                return getattr(self.conn, name)
-
-            def cursor(self):
-                return Cursor(self.conn.cursor())
-
-            def __enter__(self):
-                self.conn.__enter__()
-                return self
-
-            def __exit__(self, *args):
-                return self.conn.__exit__(*args)
 
         def pause(table):
             if table == "review_evidence_month":
@@ -374,24 +296,113 @@ class CandidatePublicationTest(unittest.TestCase):
                 if not release.wait(5):
                     raise RuntimeError("test wait timed out")
 
-        # Disable the local flock to simulate two different checkouts; the real Oracle lock stays.
+        # Disable the local file lock to simulate two different checkouts; the Oracle row lock stays.
         with (
             patch.object(self.p.fcntl, "flock"),
-            patch.object(self.p, "connection", Conn),
-            ThreadPoolExecutor(2, thread_name_prefix="candidate") as pool,
+            ThreadPoolExecutor(2) as pool,
         ):
-            a = pool.submit(self.p.publish, folder, after_merge=pause)
+            a = pool.submit(self.publish, after_merge=pause)
             try:
-                self.assertTrue(written.wait(3))
-                b = pool.submit(self.p.publish, folder, after_merge=callbacks.append)
-                self.assertTrue(second_attempt.wait(3))
+                self.assertTrue(written.wait(10))
+                b = pool.submit(self.publish, after_merge=callbacks.append)
+                time.sleep(1)
                 self.assertFalse(b.done())
             finally:
                 release.set()
-            self.assertEqual(a.result(timeout=5), b.result(timeout=5))
+            self.assertEqual(a.result(timeout=10), b.result(timeout=10))
         self.assertEqual(callbacks, [], "A published delivery was merged again")
         self.assertEqual(len(self.snapshot()["evidence"]), 1)
-        self.assertEqual(self.status(self.deliveries[-1]), ("PUBLISHED", None))
+
+
+class CandidateSelectionTest(unittest.TestCase):
+    """The procedure against the loaded warehouse: the same candidates as an independent count, digests checked, a repeat changes nothing."""
+
+    month = "2009-03-01"
+
+    def setUp(self):
+        import candidate_import as p
+        from database_target import require_test
+
+        self.p = p
+        with p.connection() as conn, conn.cursor() as cur:
+            require_test(conn)
+            cur.execute(
+                "select count(*) from loan_dw.dwd_loan_monthly_perf where release_id=:r and monthly_reporting_period=:m",
+                r=RELEASE,
+                m=datetime.fromisoformat(self.month),
+            )
+            if cur.fetchone()[0] == 0:
+                self.skipTest(f"{RELEASE} has no rows for {self.month}")
+            self.rule = p.select_rule(cur, self.month)
+            cur.execute(
+                "select count(*) from review_candidate where reporting_month=:m and rule_version_id=:r",
+                m=datetime.fromisoformat(self.month),
+                r=self.rule["rule_version_id"],
+            )
+            if cur.fetchone()[0]:
+                self.skipTest(
+                    f"candidates for {self.month} already exist; this test only cleans its own rows"
+                )
+        self.addCleanup(self.clean)
+
+    def clean(self):
+        with self.p.connection() as conn, conn.cursor() as cur:
+            clean_candidates(
+                cur,
+                "reporting_month=:m and rule_version_id=:r",
+                m=datetime.fromisoformat(self.month),
+                r=self.rule["rule_version_id"],
+            )
+            cur.execute(
+                "delete from review_candidate_delivery where json_value(manifest_json,'$.reporting_month')=:m",
+                m=self.month,
+            )
+            conn.commit()
+
+    def test_selection_matches_independent_count_and_repeats_cleanly(self):
+        from datetime import date
+
+        with self.p.connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                """select loan_identifier, monthly_reporting_period, current_loan_delinquency_status
+                from loan_dw.dwd_loan_monthly_perf where release_id=:r
+                and monthly_reporting_period in (add_months(:m,-1), :m)""",
+                r=RELEASE,
+                m=datetime.fromisoformat(self.month),
+            )
+            status = {}
+            for loan, period, code in cur.fetchall():
+                status[(loan, period.date())] = self.p.level(code)
+        report = date.fromisoformat(self.month)
+        previous = date(
+            report.year - (report.month == 1), (report.month - 2) % 12 + 1, 1
+        )
+        threshold = self.rule["min_delinquency_status"]
+        expected = sorted(
+            loan
+            for (loan, period), lvl in status.items()
+            if period == report
+            and lvl is not None
+            and lvl >= threshold
+            and (status.get((loan, previous)) or 0) < threshold
+        )
+        self.assertGreater(len(expected), 0)
+        delivery = self.p.publish(RELEASE, self.month)
+        before = self.p.boundary()
+        with self.p.connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                """select c.loan_identifier, e.delivery_id from review_candidate c
+                join review_evidence e on e.evidence_id=c.latest_evidence_id
+                where c.reporting_month=:m and c.rule_version_id=:r and c.candidate_source='DW'
+                order by c.loan_identifier""",
+                m=datetime.fromisoformat(self.month),
+                r=self.rule["rule_version_id"],
+            )
+            rows = cur.fetchall()
+        self.assertEqual([r[0] for r in rows], expected)
+        self.assertEqual({r[1].hex() for r in rows}, {delivery})
+        self.assertEqual(self.p.publish(RELEASE, self.month), delivery)
+        self.assertEqual(self.p.boundary(), before)
 
 
 def setUpModule():

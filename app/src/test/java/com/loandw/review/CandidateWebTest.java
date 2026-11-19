@@ -66,7 +66,7 @@ class CandidateWebTest {
             for (int i=0; i<105; i++) {
                 long id = CandidateFixtures.insert(j, prefix + String.format("%04d", i));
                 ids.add(id);
-                j.sql("update review_candidate set candidate_source='SPARK' where candidate_id=:id")
+                j.sql("update review_candidate set candidate_source='DW' where candidate_id=:id")
                     .param("id", id).update();
             }
             evidenceId = addEvidence(j, ids.get(0), "a");

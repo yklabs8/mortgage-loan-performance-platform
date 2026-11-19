@@ -1,8 +1,11 @@
-"""Validate a candidate delivery package and merge it as loan_oltp in a single transaction; called by a scheduler or the command line.
+"""Select review candidates in Oracle and publish them as loan_oltp in a single transaction; called by a scheduler or the command line.
 
-Usage: .venv/bin/python python/candidate_import.py <delivery dir>
-Requires: source/oltp/candidate_delivery.sql. Reads only the private password file and never uses the caller's account.
-PREPARING is registered and committed separately; business rows, VALIDATED, and PUBLISHED share one transaction, and a failure leaves only FAILED.
+Usage: .venv/bin/python python/candidate_import.py <release> <reporting month, first day: YYYY-MM-01>
+Requires: source/oltp/candidate_delivery.sql and candidate_publish.sql. Reads only the private password file and never uses the caller's account.
+Steps: the PL/SQL procedure candidate_publish.stage_month applies the review rule to the warehouse and fills this session's stage tables;
+this program then checks every staged row independently (business keys, rule, months, digests) and merges them in the same transaction.
+The delivery ID is derived from the manifest, so identical content is published once and a repeated run changes nothing.
+PREPARING and FAILED are recorded on a second connection; business rows, VALIDATED, and PUBLISHED share one transaction.
 """
 
 import fcntl
@@ -17,21 +20,43 @@ from pathlib import Path
 import oracledb
 
 from db import password
-from export_candidate_rule import select_rule
 from failure_codes import SpaceGuardError
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "spark"))
-from candidate_contract import (
-    CANDIDATE_COLUMNS,
-    DATE_COLUMNS,
-    KEY,
-    NUMERIC_COLUMNS,
-    PERFORMANCE,
-    validate_candidate_package,
-)
-from delivery_contract import read_file
-
 MIB = 1048576
+RULE_CODE = "DLQ60_ENTRY"
+KEY = ["rule_version_id", "data_source", "loan_identifier", "reporting_month"]
+ORIGIN = [
+    "classic_fico",
+    "original_upb",
+    "original_loan_to_value_ltv",
+    "original_interest_rate",
+    "property_state",
+    "origination_year",
+    "first_payment_date",
+]
+PERFORMANCE = [
+    "current_loan_delinquency_status",
+    "current_actual_upb",
+    "current_interest_rate",
+    "zero_balance_code",
+    "zero_balance_effective_date",
+    "modification_flag",
+]
+# Column order of each stage table; the evidence digest uses this order (source/oltp/candidate_publish.sql)
+CANDIDATE_COLUMNS = {
+    "review_candidate": KEY + ["delinquency_status", "source_release_id"],
+    "review_evidence": KEY
+    + ["source_release_id", "rule_code", "version_no", "min_delinquency_status"]
+    + ORIGIN
+    + PERFORMANCE
+    + [
+        "previous_delinquency_status",
+        "previous_month_missing",
+        "missing_months",
+        "content_sha256",
+    ],
+    "review_evidence_month": KEY + ["monthly_reporting_period"] + PERFORMANCE,
+}
 BUSINESS_TABLES = [
     "review_candidate",
     "review_evidence",
@@ -43,7 +68,7 @@ BUSINESS_TABLES = [
 
 
 def connection():
-    """Fixed review database account; unaffected by ORACLE_USER and needs no cross-schema privileges."""
+    """Fixed review database account; unaffected by ORACLE_USER."""
     import os
 
     from database_target import require_test, settings
@@ -60,64 +85,132 @@ def connection():
     return conn
 
 
-def content_digest(row, monthly):
-    """Independently recompute Spark's fixed-column-order JSON, keeping NULL, leading zeros, and decimal(22,8)."""
-    integers = {
-        "rule_version_id",
-        "version_no",
-        "min_delinquency_status",
-        "origination_year",
+def first_of_month(reporting_month):
+    month = date.fromisoformat(reporting_month)
+    if month.day != 1 or month.isoformat() != reporting_month:
+        raise ValueError(
+            "The reporting month must be the first day of a month (YYYY-MM-01)"
+        )
+    return month
+
+
+def select_rule(cur, reporting_month):
+    """The rule version in effect for the month: effective date descending, then version descending."""
+    month = first_of_month(reporting_month)
+    cur.execute(
+        """select v.rule_version_id, v.version_no, v.min_delinquency_status,
+        v.effective_from from review_rule_version v
+        join review_rule r on r.rule_id=v.rule_id
+        where r.rule_code=:code and r.is_active='Y' and v.effective_from<=:month
+        order by v.effective_from desc, v.version_no desc fetch first 1 row only""",
+        code=RULE_CODE,
+        month=month,
+    )
+    row = cur.fetchone()
+    if row is None:
+        raise ValueError(f"No effective {RULE_CODE} rule")
+    if any(value != int(value) for value in row[:3]):
+        raise ValueError("Rule version or threshold is not an integer")
+    return {
+        "rule_code": RULE_CODE,
+        "rule_version_id": int(row[0]),
+        "version_no": int(row[1]),
+        "min_delinquency_status": int(row[2]),
+        "effective_from": row[3].date().isoformat(),
     }
 
-    def scalar(key, value):
-        if value is None or (value == "" and key != "missing_months"):
-            return "null"
-        if key in NUMERIC_COLUMNS:
-            number = Decimal(str(value))
-            return (
-                str(int(number))
-                if key in integers
-                else str(number.quantize(Decimal("0.00000001")))
-            )
-        if key == "previous_month_missing":
-            return str(value).lower()
-        return json.dumps(str(value), ensure_ascii=False, separators=(",", ":"))
 
-    def obj(values, keys):
-        return (
-            "{"
-            + ",".join(json.dumps(k) + ":" + scalar(k, values[k]) for k in keys)
-            + "}"
-        )
+def canonical(value):
+    """Digest text of one value, as in candidate_publish.seal: numbers with three decimals, dates as YYYY-MM-DD, NULL as empty."""
+    if value is None:
+        return ""
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%d")
+    if isinstance(value, (Decimal, int)):
+        return format(Decimal(value).quantize(Decimal("0.001")), "f")
+    return str(value)
 
-    cols = [c for c in CANDIDATE_COLUMNS["review_evidence"] if c != "content_sha256"]
+
+def content_digest(row, monthly):
+    """Recompute an evidence digest independently from the staged values."""
+    columns = [c for c in CANDIDATE_COLUMNS["review_evidence"] if c != "content_sha256"]
     keys = ["monthly_reporting_period"] + PERFORMANCE
-    payload = (
-        obj(row, cols)[:-1]
-        + ',"months":['
-        + ",".join(
-            obj(m, keys)
+    text = (
+        "|".join(canonical(row[c]) for c in columns)
+        + "#"
+        + ";".join(
+            "|".join(canonical(m[k]) for k in keys)
             for m in sorted(monthly, key=lambda m: m["monthly_reporting_period"])
         )
-        + "]}"
     )
-    return hashlib.sha256(payload.encode()).hexdigest()
+    return hashlib.sha256(text.encode()).hexdigest()
+
+
+def delivery_digest(evidence):
+    """Content digest of a delivery, as in candidate_publish.seal: evidence digests chained in business-key order."""
+    chain = ""
+    for row in sorted(
+        evidence,
+        key=lambda r: (
+            r["data_source"],
+            r["loan_identifier"],
+            r["reporting_month"],
+            r["rule_version_id"],
+        ),
+    ):
+        chain += row["content_sha256"]
+        if len(chain) > 3800:
+            chain = hashlib.sha256(chain.encode()).hexdigest()
+    return hashlib.sha256((chain + "#").encode()).hexdigest()
+
+
+def read_stage(cur):
+    def decimal_handler(cursor, metadata):
+        if metadata.type_code == oracledb.DB_TYPE_NUMBER:
+            return cursor.var(
+                oracledb.DB_TYPE_VARCHAR,
+                arraysize=cursor.arraysize,
+                outconverter=Decimal,
+            )
+
+    rows = {}
+    cur.outputtypehandler = decimal_handler
+    try:
+        for table, columns in CANDIDATE_COLUMNS.items():
+            cur.execute(f"select {','.join(columns)} from {table}_stage")
+            rows[table] = [dict(zip(columns, r, strict=True)) for r in cur.fetchall()]
+    finally:
+        cur.outputtypehandler = None
+    return rows
 
 
 def key(row):
     return tuple(row[c] for c in KEY)
 
 
-def load_rows(folder, manifest):
-    """Validate business keys, digests, rules, and months; a valid file digest must not hide wrong business content."""
-    rows = {}
-    for item in manifest["files"]:
-        t = item["table"]
-        if t in CANDIDATE_COLUMNS:
-            rows[t] = [
-                dict(zip(item["columns"], r, strict=True))
-                for r in read_file(folder / item["path"], item["columns"])
-            ]
+def level(value):
+    return (
+        99
+        if value == "RA"
+        else int(value)
+        if re.fullmatch(r"[0-9]+", value or "")
+        else None
+    )
+
+
+def check_stage(rows, manifest, release, reporting_month):
+    """Check what the procedure staged without trusting it: keys, scope, rule, months, and every digest."""
+    rule = manifest["rule"]
+    report = datetime.fromisoformat(reporting_month)
+    if (
+        manifest.get("schema_version") != 3
+        or manifest.get("product") != "REVIEW_CANDIDATES"
+        or manifest.get("release") != release
+        or manifest.get("reporting_month") != reporting_month
+    ):
+        raise ValueError("Manifest scope differs from the request")
+    if {t: len(r) for t, r in rows.items()} != manifest["rows"]:
+        raise ValueError("Stage row counts differ from the manifest")
     indexed = {}
     for t in ["review_candidate", "review_evidence"]:
         indexed[t] = {}
@@ -129,71 +222,62 @@ def load_rows(folder, manifest):
     if candidates.keys() != evidence.keys():
         raise ValueError("Candidate and evidence business keys differ")
     months = {k: {} for k in candidates}
-    report = date.fromisoformat(manifest["reporting_month"])
     lower = report.replace(year=report.year - 1)
     for row in rows["review_evidence_month"]:
-        k = key(row)
-        month = date.fromisoformat(row["monthly_reporting_period"])
+        k, month = key(row), row["monthly_reporting_period"]
         if k not in months or month.day != 1 or not lower <= month <= report:
             raise ValueError("Orphan or out-of-range monthly evidence")
-        if month.isoformat() in months[k]:
+        if month in months[k]:
             raise ValueError("Duplicate monthly evidence")
-        months[k][month.isoformat()] = row
+        months[k][month] = row
+    years = set()
     for k, row in evidence.items():
         candidate = candidates[k]
         if (
-            row["rule_version_id"] != str(manifest["rule"]["rule_version_id"])
-            or row["reporting_month"] != manifest["reporting_month"]
+            row["rule_version_id"] != rule["rule_version_id"]
+            or row["reporting_month"] != report
             or row["data_source"] != "FRE"
             or not re.fullmatch(r"[A-Za-z0-9]{12}", row["loan_identifier"])
-            or row["source_release_id"] != manifest["release"]
-            or any(
-                row[c] != str(manifest["rule"][c])
-                for c in ["rule_code", "version_no", "min_delinquency_status"]
-            )
-            or row["origination_year"] not in {str(y) for y in manifest["source_years"]}
+            or row["source_release_id"] != release
+            or row["rule_code"] != rule["rule_code"]
+            or row["version_no"] != rule["version_no"]
+            or row["min_delinquency_status"] != rule["min_delinquency_status"]
             or candidate["source_release_id"] != row["source_release_id"]
             or candidate["delinquency_status"] != row["current_loan_delinquency_status"]
         ):
             raise ValueError("Candidate scope or row rule mismatch")
+        years.add(int(row["origination_year"]))
         available = months[k]
-        if report.isoformat() not in available:
+        if report not in available:
             raise ValueError("Evidence is missing the reporting month")
-        if any(row[c] != available[report.isoformat()][c] for c in PERFORMANCE):
+        if any(row[c] != available[report][c] for c in PERFORMANCE):
             raise ValueError("Reporting-month evidence fields differ")
         expected_missing = []
-        for offset in range(13):
+        for offset in range(12, -1, -1):
             n = report.year * 12 + report.month - 1 - offset
-            month = date(n // 12, n % 12 + 1, 1).isoformat()
+            month = report.replace(year=n // 12, month=n % 12 + 1)
             if month not in available:
-                expected_missing.append(month)
-        previous_n = report.year * 12 + report.month - 2
-        previous = date(previous_n // 12, previous_n % 12 + 1, 1).isoformat()
+                expected_missing.append(month.strftime("%Y-%m-%d"))
+        n = report.year * 12 + report.month - 2
+        previous = report.replace(year=n // 12, month=n % 12 + 1)
         if (
-            row["missing_months"] != "|".join(sorted(expected_missing))
+            (row["missing_months"] or "") != "|".join(expected_missing)
             or row["previous_month_missing"] != str(previous not in available).lower()
             or row["previous_delinquency_status"]
-            != available.get(previous, {}).get("current_loan_delinquency_status", "")
+            != available.get(previous, {}).get("current_loan_delinquency_status")
         ):
             raise ValueError("Missing months or previous-month flag mismatch")
-
-        def level(value):
-            return (
-                99
-                if value == "RA"
-                else int(value)
-                if re.fullmatch(r"[0-9]+", value or "")
-                else None
-            )
-
         current = level(row["current_loan_delinquency_status"])
         prev = level(row["previous_delinquency_status"]) or 0
-        threshold = manifest["rule"]["min_delinquency_status"]
+        threshold = rule["min_delinquency_status"]
         if current is None or current < threshold or prev >= threshold:
             raise ValueError("Candidate does not satisfy the rule")
         if content_digest(row, list(available.values())) != row["content_sha256"]:
             raise ValueError("Evidence content digest mismatch")
-    return rows
+    if manifest["source_years"] != sorted(years):
+        raise ValueError("Manifest origination years differ from the evidence")
+    if manifest["content_sha256"] != delivery_digest(rows["review_evidence"]):
+        raise ValueError("Manifest content digest mismatch")
 
 
 def usage(cur):
@@ -218,61 +302,20 @@ def guard(cur, reserve=0):
     cur.execute("select sum(bytes) from user_free_space where tablespace_name='USERS'")
     free = cur.fetchone()[0]
     used = usage(cur)
-    # All candidate objects (including registration LOBs) are conservatively counted against 160 MiB; the shared 20 MiB record budget is untouched.
+    # All candidate objects (including registration LOBs) are conservatively counted against 160 MiB.
     if used + reserve > 160 * MIB or free is None or free - reserve < 500 * MIB:
-        raise SpaceGuardError("Not enough room: candidate 160 MiB budget or at least 500 MiB free in USERS")
+        raise SpaceGuardError(
+            "Not enough room: candidate 160 MiB budget or at least 500 MiB free in USERS"
+        )
     return {"candidate_bytes": used, "users_free_bytes": free}
-
-
-def convert(column, value):
-    if value == "":
-        return None
-    if column in DATE_COLUMNS:
-        return datetime.fromisoformat(value)
-    if column in NUMERIC_COLUMNS:
-        number = Decimal(value)
-        if not number.is_finite():
-            raise ValueError("Non-finite number")
-        return number
-    return value
-
-
-def stage(cur, folder, manifest, rows):
-    for table, columns in CANDIDATE_COLUMNS.items():
-        values = [tuple(convert(c, row[c]) for c in columns) for row in rows[table]]
-        if values:
-            cur.executemany(
-                f"insert into {table}_stage ({','.join(columns)}) values ({','.join(':' + str(i + 1) for i in range(len(columns)))})",
-                values,
-            )
-        cur.execute(f"select count(*) from {table}_stage")
-        expected = next(i["rows"] for i in manifest["files"] if i["table"] == table)
-        if cur.fetchone()[0] != expected:
-            raise ValueError("Stage table row count mismatch")
-
-        # Read back from the database independently and compare every value by column type, not just row counts.
-        def decimal_handler(cursor, metadata):
-            if metadata.type_code == oracledb.DB_TYPE_NUMBER:
-                return cursor.var(
-                    oracledb.DB_TYPE_VARCHAR,
-                    arraysize=cursor.arraysize,
-                    outconverter=Decimal,
-                )
-
-        cur.outputtypehandler = decimal_handler
-        cur.execute(f"select {','.join(columns)} from {table}_stage")
-        actual = set(cur.fetchall())
-        cur.outputtypehandler = None
-        if actual != set(values):
-            raise ValueError("Stage table cell-by-cell check mismatch")
 
 
 def merge(cur, delivery, after_merge):
     match = " and ".join("c." + c + "=s." + c for c in KEY)
     cur.execute(f"""merge into review_candidate c using review_candidate_stage s on ({match})
-        when matched then update set c.candidate_source='SPARK'
+        when matched then update set c.candidate_source='DW'
         when not matched then insert ({",".join(CANDIDATE_COLUMNS["review_candidate"])},candidate_source)
-        values ({",".join("s." + c for c in CANDIDATE_COLUMNS["review_candidate"])},'SPARK')""")
+        values ({",".join("s." + c for c in CANDIDATE_COLUMNS["review_candidate"])},'DW')""")
     after_merge("review_candidate")
     cols = CANDIDATE_COLUMNS["review_evidence"]
     cur.execute(
@@ -300,55 +343,85 @@ def merge(cur, delivery, after_merge):
         when matched then update set c.latest_evidence_id=v.evidence_id""")
 
 
-def publish(folder, after_merge=lambda _table: None):
-    folder = Path(folder).resolve()
-    text = (folder / "manifest.json").read_text()
-    m = json.loads(text)
-    delivery_hex = m.get("delivery_id", "")
-    if not re.fullmatch(r"[0-9a-f]{32}", delivery_hex):
-        raise ValueError("Invalid delivery_id")
-    delivery = bytes.fromhex(delivery_hex)
-    sha = hashlib.sha256(text.encode()).hexdigest()
+def stage(cur, release, reporting_month):
+    """Run the PL/SQL selection in this session and return the manifest text."""
+    manifest = cur.var(oracledb.DB_TYPE_VARCHAR, 4000)
+    cur.callproc(
+        "candidate_publish.stage_month",
+        [release, datetime.fromisoformat(reporting_month), RULE_CODE, manifest],
+    )
+    return manifest.getvalue()
+
+
+def seal(cur, release, reporting_month, rule_version_id):
+    """Recompute digests and the manifest from the current stage rows."""
+    manifest = cur.var(oracledb.DB_TYPE_VARCHAR, 4000)
+    cur.callproc(
+        "candidate_publish.seal",
+        [release, datetime.fromisoformat(reporting_month), rule_version_id, manifest],
+    )
+    return manifest.getvalue()
+
+
+def publish(release, reporting_month, after_merge=lambda _table: None, restage=None):
+    """restage(cursor, manifest text) may change the stage rows and return the manifest to publish (tests only)."""
+    if not re.fullmatch(r"R[0-9]+", release):
+        raise ValueError("Invalid release label")
+    first_of_month(reporting_month)
     lockpath = Path(__file__).resolve().parents[1] / "data/locks/candidate_import.lock"
     lockpath.parent.mkdir(parents=True, exist_ok=True)
-    with lockpath.open("a") as lock, connection() as conn, conn.cursor() as cur:
+    with (
+        lockpath.open("a") as lock,
+        connection() as conn,
+        connection() as ledger,
+        conn.cursor() as cur,
+        ledger.cursor() as lcur,
+    ):
         fcntl.flock(lock, fcntl.LOCK_EX)
+        # A database row lock also protects runs from different machines; stage tables are session-private temporary tables.
         cur.execute(
             "select lock_id from review_candidate_import_lock where lock_id=1 for update wait 3"
         )
         cur.fetchone()
-        cur.execute(
+        text = stage(cur, release, reporting_month)
+        if restage:
+            text = restage(cur, text)
+        sha = hashlib.sha256(text.encode()).hexdigest()
+        delivery_hex = sha[:32]
+        delivery = bytes.fromhex(delivery_hex)
+        lcur.execute(
             "select status,manifest_sha256 from review_candidate_delivery where delivery_id=:d",
             d=delivery,
         )
-        prior = cur.fetchone()
+        prior = lcur.fetchone()
         if prior and prior[1] != sha:
             raise ValueError("Same delivery ID with different content")
         if prior and prior[0] == "PUBLISHED":
-            validate_candidate_package(folder)
+            conn.rollback()
             return delivery_hex
-        # Estimate all CSVs plus indexes and two in-flight copies first, so an oversized package is stopped before it is read into memory.
-        reserve = sum(p.stat().st_size for p in folder.rglob("*.csv")) * 6 + 4 * MIB
+        m = json.loads(text)
+        # Two in-flight copies of every staged row plus indexes, before anything is registered.
+        reserve = (
+            m["rows"]["review_evidence"] * 4096
+            + m["rows"]["review_evidence_month"] * 1024
+            + 4 * MIB
+        )
         guard(cur, reserve)
+        # The registration is committed on its own connection; a commit here would empty the stage tables.
         if prior:
-            cur.execute(
+            lcur.execute(
                 "update review_candidate_delivery set status='PREPARING',error_message=null where delivery_id=:d and status!='PUBLISHED'",
                 d=delivery,
             )
         else:
-            cur.execute(
+            lcur.execute(
                 "insert into review_candidate_delivery (delivery_id,manifest_sha256,manifest_json,status) values (:d,:h,:j,'PREPARING')",
                 d=delivery,
                 h=sha,
                 j=text,
             )
-        conn.commit()
+        ledger.commit()
         try:
-            # A database row lock also protects imports from different machines; stage tables are session-private temporary tables.
-            cur.execute(
-                "select lock_id from review_candidate_import_lock where lock_id=1 for update wait 3"
-            )
-            cur.fetchone()
             cur.execute(
                 "select status,manifest_sha256 from review_candidate_delivery where delivery_id=:d for update",
                 d=delivery,
@@ -357,15 +430,13 @@ def publish(folder, after_merge=lambda _table: None):
             if recorded_sha != sha:
                 raise ValueError("Same delivery ID with different content")
             if status == "PUBLISHED":
+                conn.rollback()
                 return delivery_hex
-            m = validate_candidate_package(folder)
-            if (folder / "manifest.json").read_text() != text:
-                raise ValueError("Manifest changed during validation")
-            if select_rule(cur, m["reporting_month"]) != m["rule"]:
-                raise ValueError("Manifest rule version or threshold differs from the database")
-            guard(cur, reserve)
-            rows = load_rows(folder, m)
-            stage(cur, folder, m, rows)
+            if select_rule(cur, reporting_month) != m["rule"]:
+                raise ValueError(
+                    "Manifest rule version or threshold differs from the database"
+                )
+            check_stage(read_stage(cur), m, release, reporting_month)
             cur.execute(
                 "update review_candidate_delivery set status='VALIDATED' where delivery_id=:d",
                 d=delivery,
@@ -380,18 +451,32 @@ def publish(folder, after_merge=lambda _table: None):
         except Exception as error:
             conn.rollback()
             message = str(error).encode()[:3900].decode("utf-8", errors="ignore")
-            cur.execute(
+            lcur.execute(
                 "update review_candidate_delivery set status='FAILED',error_message=:e where delivery_id=:d and status!='PUBLISHED'",
                 d=delivery,
                 e=message,
             )
-            conn.commit()
+            ledger.commit()
             raise
     return delivery_hex
 
 
 def boundary():
-    """Row-by-row digests before and after a full check, covering existing candidates/cases and every object of this feature."""
+    """Row-by-row digests of existing candidates/cases and every object of this feature, to prove a check left nothing behind."""
+    import time
+
+    for attempt in range(5):
+        try:
+            return snapshot_digests()
+        except oracledb.DatabaseError as error:
+            # ORA-01466: a table got its first storage segment (deferred segment creation) after the read-only
+            # snapshot started, which happens right after the first publication; a new snapshot a moment later reads it.
+            if error.args[0].code != 1466 or attempt == 4:
+                raise
+            time.sleep(2)
+
+
+def snapshot_digests():
     result = {}
     with connection() as conn, conn.cursor() as cur:
         cur.execute("set transaction read only")
@@ -427,10 +512,20 @@ if __name__ == "__main__":
         if sys.argv[1] == "--save-boundary":
             path.write_text(json.dumps(actual, indent=2) + "\n")
         elif actual != json.loads(path.read_text()):
-            sys.exit("Candidate/evidence/registration/case content changed: the check left residue or rewrote existing data")
+            sys.exit(
+                "Candidate/evidence/registration/case content changed: the check left residue or rewrote existing data"
+            )
         else:
-            print("Candidate/evidence/registration/case row digests agree: no test residue")
-    elif len(sys.argv) == 2:
-        print("Candidates published", publish(sys.argv[1]))
+            print(
+                "Candidate/evidence/registration/case row digests agree: no test residue"
+            )
+    elif len(sys.argv) == 3:
+        delivery_id = publish(sys.argv[1], sys.argv[2])
+        with connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "select json_value(manifest_json, '$.rows.review_candidate') from review_candidate_delivery where delivery_id=:d",
+                d=bytes.fromhex(delivery_id),
+            )
+            print(f"Candidates published {delivery_id}: {cur.fetchone()[0]} candidates")
     else:
         sys.exit(__doc__)

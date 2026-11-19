@@ -52,7 +52,7 @@ def password_from_file(user, target=None):
     from database_target import settings
 
     target = settings()[0] if target is None else target.upper()
-    if target not in {"DEMO", "TEST", "RESTORE"}:
+    if target not in {"DEMO", "TEST", "RESTORE", "E2E"}:
         raise ValueError("Invalid database target")
     value = entries.get(entry_key(user, target))
     if value == "":
@@ -87,7 +87,7 @@ def save_password(user, password, target=None):
         from database_target import settings
 
         target = settings()[0]
-    if target not in ("DEMO", "TEST", "RESTORE"):
+    if target not in ("DEMO", "TEST", "RESTORE", "E2E"):
         raise ValueError("Invalid database target")
     entries[entry_key(user, target)] = password
     handle, temp_name = tempfile.mkstemp(prefix=".passwords-", dir=folder)

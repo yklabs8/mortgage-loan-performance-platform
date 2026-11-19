@@ -113,7 +113,7 @@ public class ReviewRepository {
             .list();
     }
 
-    /** SPARK candidates paged by stable business key; the cursor holds the full sort key. */
+    /** Published (DW) candidates paged by stable business key; the cursor holds the full sort key. */
     public List<CandidateRow> candidates(String loan) {
         return candidates(loan, null, 50, null);
     }
@@ -136,7 +136,7 @@ public class ReviewRepository {
             inner join review_rule_version v on c.rule_version_id=v.rule_version_id
             inner join review_rule rl on v.rule_id=rl.rule_id
             left join risk_review_case rc on rc.candidate_id=c.candidate_id
-            where c.candidate_source='SPARK'
+            where c.candidate_source='DW'
                 and (:loan is null or c.loan_identifier=:loan)
                 and (:month is null or c.reporting_month=:month)
                 and (:firstPage=1 or c.reporting_month > :cm
@@ -195,7 +195,7 @@ public class ReviewRepository {
             inner join review_rule_version v on v.rule_version_id=c.rule_version_id
             inner join review_rule rl on rl.rule_id=v.rule_id
             left join risk_review_case rc on rc.candidate_id=c.candidate_id
-            where c.candidate_id=:id and c.candidate_source='SPARK'
+            where c.candidate_id=:id and c.candidate_source='DW'
             """).param("id", id).query(CandidateRow.class).optional();
     }
 
@@ -406,7 +406,7 @@ public class ReviewRepository {
     private long openCaseCall(long candidateId, long userId) {
         int allowed = jdbc.sql("""
             select count(*) from review_candidate where candidate_id=:id
-                and (candidate_source='TEST' or (candidate_source='SPARK' and latest_evidence_id is not null))
+                and (candidate_source='TEST' or (candidate_source='DW' and latest_evidence_id is not null))
             """).param("id", candidateId).query(Integer.class).single();
         if (allowed != 1) throw new ReviewApiException("error.candidate.noEvidence");
         var key = new GeneratedKeyHolder();

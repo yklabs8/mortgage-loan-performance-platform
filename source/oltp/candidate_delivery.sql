@@ -9,7 +9,7 @@ alter table review_candidate add (
    , latest_evidence_id number
 );
 alter table review_candidate add constraint review_candidate_source_ck
-check (candidate_source in ('SAMPLE', 'SPARK', 'TEST'));
+check (candidate_source in ('SAMPLE', 'DW', 'TEST'));
 
 create table review_candidate_delivery (
    delivery_id raw(16) not null
@@ -169,7 +169,7 @@ commit;
 
 -- Column comments spell out the contract column names and may exceed 80 columns.
 -- noqa: disable=LT05
-comment on table review_candidate_delivery is 'Candidate delivery: review_candidate_delivery; field contract in spark/candidate_contract.py';
+comment on table review_candidate_delivery is 'Candidate delivery: review_candidate_delivery; column order in python/candidate_import.py';
 comment on column review_candidate_delivery.delivery_id is 'Candidate delivery: delivery_id';
 comment on column review_candidate_delivery.manifest_sha256 is 'Candidate delivery: manifest_sha256';
 comment on column review_candidate_delivery.manifest_json is 'Candidate delivery: manifest_json';
@@ -177,7 +177,7 @@ comment on column review_candidate_delivery.status is 'Candidate delivery: statu
 comment on column review_candidate_delivery.error_message is 'Candidate delivery: error_message';
 comment on column review_candidate_delivery.created_at is 'Candidate delivery: created_at';
 comment on column review_candidate_delivery.published_at is 'Candidate delivery: published_at';
-comment on table review_evidence is 'Candidate delivery: review_evidence; field contract in spark/candidate_contract.py';
+comment on table review_evidence is 'Candidate delivery: review_evidence; column order in python/candidate_import.py';
 comment on column review_evidence.evidence_id is 'Candidate delivery: evidence_id';
 comment on column review_evidence.candidate_id is 'Candidate delivery: candidate_id';
 comment on column review_evidence.delivery_id is 'Candidate delivery: delivery_id';
@@ -207,7 +207,7 @@ comment on column review_evidence.previous_month_missing is 'Candidate delivery:
 comment on column review_evidence.missing_months is 'Candidate delivery: missing_months';
 comment on column review_evidence.content_sha256 is 'Candidate delivery: content_sha256';
 comment on column review_evidence.created_at is 'Candidate delivery: created_at';
-comment on table review_evidence_month is 'Candidate delivery: review_evidence_month; field contract in spark/candidate_contract.py';
+comment on table review_evidence_month is 'Candidate delivery: review_evidence_month; column order in python/candidate_import.py';
 comment on column review_evidence_month.evidence_id is 'Candidate delivery: evidence_id';
 comment on column review_evidence_month.monthly_reporting_period is 'Candidate delivery: monthly_reporting_period';
 comment on column review_evidence_month.current_loan_delinquency_status is 'Candidate delivery: current_loan_delinquency_status';
@@ -216,14 +216,14 @@ comment on column review_evidence_month.current_interest_rate is 'Candidate deli
 comment on column review_evidence_month.zero_balance_code is 'Candidate delivery: zero_balance_code';
 comment on column review_evidence_month.zero_balance_effective_date is 'Candidate delivery: zero_balance_effective_date';
 comment on column review_evidence_month.modification_flag is 'Candidate delivery: modification_flag';
-comment on table review_candidate_stage is 'Candidate delivery: review_candidate_stage; field contract in spark/candidate_contract.py';
+comment on table review_candidate_stage is 'Candidate delivery: review_candidate_stage; column order in python/candidate_import.py';
 comment on column review_candidate_stage.rule_version_id is 'Candidate delivery: rule_version_id';
 comment on column review_candidate_stage.data_source is 'Candidate delivery: data_source';
 comment on column review_candidate_stage.loan_identifier is 'Candidate delivery: loan_identifier';
 comment on column review_candidate_stage.reporting_month is 'Candidate delivery: reporting_month';
 comment on column review_candidate_stage.delinquency_status is 'Candidate delivery: delinquency_status';
 comment on column review_candidate_stage.source_release_id is 'Candidate delivery: source_release_id';
-comment on table review_evidence_stage is 'Candidate delivery: review_evidence_stage; field contract in spark/candidate_contract.py';
+comment on table review_evidence_stage is 'Candidate delivery: review_evidence_stage; column order in python/candidate_import.py';
 comment on column review_evidence_stage.rule_version_id is 'Candidate delivery: rule_version_id';
 comment on column review_evidence_stage.data_source is 'Candidate delivery: data_source';
 comment on column review_evidence_stage.loan_identifier is 'Candidate delivery: loan_identifier';
@@ -249,7 +249,7 @@ comment on column review_evidence_stage.previous_delinquency_status is 'Candidat
 comment on column review_evidence_stage.previous_month_missing is 'Candidate delivery: previous_month_missing';
 comment on column review_evidence_stage.missing_months is 'Candidate delivery: missing_months';
 comment on column review_evidence_stage.content_sha256 is 'Candidate delivery: content_sha256';
-comment on table review_evidence_month_stage is 'Candidate delivery: review_evidence_month_stage; field contract in spark/candidate_contract.py';
+comment on table review_evidence_month_stage is 'Candidate delivery: review_evidence_month_stage; column order in python/candidate_import.py';
 comment on column review_evidence_month_stage.rule_version_id is 'Candidate delivery: rule_version_id';
 comment on column review_evidence_month_stage.data_source is 'Candidate delivery: data_source';
 comment on column review_evidence_month_stage.loan_identifier is 'Candidate delivery: loan_identifier';
@@ -261,9 +261,9 @@ comment on column review_evidence_month_stage.current_interest_rate is 'Candidat
 comment on column review_evidence_month_stage.zero_balance_code is 'Candidate delivery: zero_balance_code';
 comment on column review_evidence_month_stage.zero_balance_effective_date is 'Candidate delivery: zero_balance_effective_date';
 comment on column review_evidence_month_stage.modification_flag is 'Candidate delivery: modification_flag';
-comment on table review_candidate_import_lock is 'Candidate delivery: review_candidate_import_lock; field contract in spark/candidate_contract.py';
+comment on table review_candidate_import_lock is 'Candidate delivery: review_candidate_import_lock; column order in python/candidate_import.py';
 comment on column review_candidate_import_lock.lock_id is 'Candidate delivery: lock_id';
-comment on column review_candidate.candidate_source is 'Source: SAMPLE original sample, SPARK delivery, TEST test fixture';
+comment on column review_candidate.candidate_source is 'Source: SAMPLE reference interface review_api.generate_candidates, DW published by candidate_publish with evidence, TEST test fixture';
 comment on column review_candidate.latest_evidence_id is 'Latest published evidence version; identical content reuses the existing version';
 comment on column risk_review_case.evidence_id is 'Evidence version pinned when the case was opened; later deliveries do not overwrite it';
 -- noqa: enable=LT05

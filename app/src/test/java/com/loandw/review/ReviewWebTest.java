@@ -112,7 +112,7 @@ class ReviewWebTest {
     @Test
     @DisplayName("SQL injection: quotes and or in the input are only text to search for, never SQL")
     void sqlInjectionIsTreatedAsText() throws Exception {
-        // TEST-source candidates are not shown on the delivered candidate page; SPARK loan search and the injection counterexample are in CandidateWebTest.
+        // TEST-source candidates are not shown on the delivered candidate page; published-candidate loan search and the injection counterexample are in CandidateWebTest.
         mvc.perform(get("/candidates").param("loan", candidateLoan).with(as(ANALYST)))
             .andExpect(status().isOk())
             .andExpect(model().attribute("candidates", empty()));

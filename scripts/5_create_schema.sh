@@ -4,7 +4,7 @@
 #          1. Create loan_oltp and loan_test (scripts 14 and 15) and the login-only web account loan_app
 #          2. Deploy the objects below, each as its owner
 #          3. Mark the database as a TEST environment (write tests refuse to run anywhere else) and grant the cross-account reads
-#          4. Grow the USERS tablespace file to 4 GB if smaller, then grant and verify the web account (scripts/13_create_app_user.sh, which ends with the least-privilege test)
+#          4. Grow the USERS tablespace file to 8 GB if smaller (four sample vintages and the 500 MiB the candidate step keeps free), then grant and verify the web account (scripts/13_create_app_user.sh, which ends with the least-privilege test)
 # Usage: scripts/5_create_schema.sh
 # Requires: ODS objects created (2_create_ods.sh); passwords for loan_oltp, loan_app, and loan_test saved with python/password_store.py set
 # Note: run once on a new development database; it does not upgrade an existing installation
@@ -80,6 +80,7 @@ steps=(
   "loan_oltp source/ops/grant_oltp_to_dw.sql"
   "loan_dw source/ops/grant_dw_to_oltp.sql"
   "loan_oltp source/oltp/review_api.sql"
+  "loan_oltp source/oltp/candidate_publish.sql"
   "loan_dw source/dim/load_dim_date.sql"
   "loan_dw source/dim/load_dim_delinquency_status.sql"
   "loan_dw source/dim/load_dim_geography.sql"
@@ -124,7 +125,7 @@ done
 
 scripts/run_sql.sh source/ops/database_environment.sql environment_name=TEST > /dev/null
 ORACLE_USER=loan_oltp scripts/run_sql.sh source/migrate/m8_grant_status_transition.sql > /dev/null
-# The candidate importer stops unless USERS has at least 500 MiB free; a new Oracle Free database starts with a small USERS file, so grow it to 4 GB
+# The candidate importer stops unless USERS has at least 500 MiB free; a new Oracle Free database starts with a small USERS file, so grow it to 8 GB, enough for the four sample vintages
 docker exec -i "$container" sqlplus -s / as sysdba <<'SQL'
 whenever sqlerror exit sql.sqlcode
 alter session set container = FREEPDB1;
@@ -133,8 +134,8 @@ declare
    l_bytes number;
 begin
    select file_name, bytes into l_file, l_bytes from dba_data_files where tablespace_name = 'USERS';
-   if l_bytes < 4294967296 then
-      execute immediate 'alter database datafile ' || dbms_assert.enquote_literal(l_file) || ' resize 4g';
+   if l_bytes < 8589934592 then
+      execute immediate 'alter database datafile ' || dbms_assert.enquote_literal(l_file) || ' resize 8g';
    end if;
 end;
 /
