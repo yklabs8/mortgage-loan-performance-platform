@@ -161,11 +161,10 @@ The run ends with “End-to-end test passed”. It takes about 20 minutes on a l
 
 ## Dashboards
 
-The Tableau workbook `dashboards/loan_risk_dashboards.twb` has four dashboards: roll rates, vintage delinquency, modification outcomes, and cure and final outcome. It reads CSV exports of the analysis tables from `dashboards/data/` (not in git). Export them, then regenerate the workbook so it points at your copy:
+The Tableau workbook `dashboards/loan_risk_dashboards.twb` has four dashboards: roll rates, vintage delinquency, modification outcomes, and cure and final outcome. It reads CSV exports of the analysis tables from `dashboards/data/` (not in git). Export the CSV files for Tableau, then open the workbook in Tableau:
 
 ```bash
 .venv/bin/python python/export_dashboard_csv.py "$RELEASE" dashboards/data
-python3 dashboards/build_dashboards.py dashboards/data dashboards/loan_risk_dashboards.twb
 ```
 
 ## Tests

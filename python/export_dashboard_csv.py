@@ -2,7 +2,6 @@
 
 Usage: .venv/bin/python python/export_dashboard_csv.py <release> <output directory>
 For example: .venv/bin/python python/export_dashboard_csv.py R47 dashboards/data
-Then: python3 dashboards/build_dashboards.py dashboards/data dashboards/loan_risk_dashboards.twb
 Writes one <table>.csv per analysis table with a header row; columns follow the table definition, without the release label;
 rows are in a fixed order, so the same data always gives byte-identical files.
 """

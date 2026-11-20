@@ -406,17 +406,17 @@ class ReviewWebTest {
     }
 
     @Test
-    @DisplayName("English interface: with or without ?lang=en, pages, success messages, business rejections, and form validation are in English")
+    @DisplayName("English interface: pages, success messages, business rejections, and form validation are in English")
     void englishInterface() throws Exception {
         long id = caseInReview();
-        mvc.perform(post("/cases/{id}/decide", id).with(as(MANAGER)).with(csrf()).param("lang", "en")
+        mvc.perform(post("/cases/{id}/decide", id).with(as(MANAGER)).with(csrf())
                 .param("expectedStatus", "IN_REVIEW").param("decisionType", "CLOSE"))
             .andExpect(content().string(containsString("Tick &quot;I confirm&quot;")));
-        mvc.perform(post("/cases/{id}/decide", id).with(as(MANAGER)).with(csrf()).param("lang", "en")
+        mvc.perform(post("/cases/{id}/decide", id).with(as(MANAGER)).with(csrf())
                 .param("expectedStatus", "IN_REVIEW").param("decisionType", "CLOSE")
                 .param("decisionNote", "English reason").param("confirmed", "true"))
             .andExpect(flash().attribute("message", "Case closed"));
-        mvc.perform(post("/cases/{id}/annotate", id).with(as(MANAGER)).with(csrf()).param("lang", "en")
+        mvc.perform(post("/cases/{id}/annotate", id).with(as(MANAGER)).with(csrf())
                 .param("noteText", "after close"))
             .andExpect(flash().attribute("error", "The case is closed and cannot be changed: " + id));
 
@@ -424,15 +424,15 @@ class ReviewWebTest {
         List<String> data = jdbc.sql("select full_name from app_user").query(String.class).list();
         for (String url : List.of("/", "/candidates", "/cases", "/cases/" + id,
                 "/reports", "/account/password")) {
-            String page = mvc.perform(get(url).param("lang", "en").with(as(MANAGER)))
+            String page = mvc.perform(get(url).with(as(MANAGER)))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
             for (String d : data) page = page.replace(d, "");
             // HTML comments are for developers and not shown by the browser; remove them too
-            page = page.replaceAll("(?s)<!--.*?-->", "").replace("test note", "").replace(">English<", "><");
+            page = page.replaceAll("(?s)<!--.*?-->", "").replace("test note", "");
             assertThat(page).as(url).doesNotContainPattern("[\\u3400-\\u9fff\\u3000-\\u303f\\uff00-\\uffef]");
         }
-        mvc.perform(get("/cases/{id}", id).param("lang", "en").with(as(MANAGER)))
+        mvc.perform(get("/cases/{id}", id).with(as(MANAGER)))
             .andExpect(content().string(containsString("Closed")))
             .andExpect(content().string(containsString("Close: English reason")))
             .andExpect(content().string(containsString("(opened) → Open")));

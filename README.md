@@ -40,7 +40,7 @@ Every layer is built in Oracle: external tables read the source files into ODS, 
 | End-to-end test | One script deploys an empty database, loads the four sample years, builds every layer, publishes candidates, walks one case through the web application over HTTP, captures the changes, and checks the monthly review report. | Done |
 | Distributed processing for the full history | Extension beyond this version: processing the full Freddie Mac history on a distributed engine, with scheduling. | Planned |
 | Dashboards — first chart | Cumulative 60+ curve by origination quarter (below). | Done |
-| Dashboards — full set | Tableau workbook for all three analyses (`dashboards/`), generated from the analysis tables of the four sample years; the charts are still being checked and exported as images. | In progress |
+| Dashboards — full set | Tableau workbook for all three analyses (`dashboards/`), reading CSV exports of the analysis tables of the four sample years; the charts are still being checked and exported as images. | In progress |
 
 ## Analyses
 
@@ -107,7 +107,7 @@ checks/        Source/detail quality, issue/quarantine records, freshness gate, 
 test/          Database tests for loaders, review workflow, CDC, report, dimensions, privileges, candidate selection and publication; end-to-end review walk-through
 docs/          Setup steps, metric definitions, source-field map, review design, manifest, images
 docs/model/    Data Modeler enterprise, logical, and relational diagrams and model-generated DDL
-dashboards/    Tableau workbook of the three analyses and its generator
+dashboards/    Tableau workbook of the three analyses
 ```
 
 ## Run it locally

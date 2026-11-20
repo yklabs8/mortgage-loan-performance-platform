@@ -2,7 +2,7 @@ package com.loandw.review;
 
 import org.springframework.jdbc.core.simple.JdbcClient;
 
-/** Loan IDs reserved for tests; business tests no longer call the candidate generation reference procedure. */
+/** Loan IDs reserved for tests; business tests insert candidates directly instead of calling the candidate generation reference procedure. */
 final class CandidateFixtures {
     static long insert(JdbcClient jdbc, String loan) {
         jdbc.sql("""

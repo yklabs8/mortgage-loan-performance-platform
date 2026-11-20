@@ -36,11 +36,11 @@ For origination quarter `q` and month `m`, the rate is `cum_dlq60_loans / eligib
 
 The rate, denominator, first-event treatment, and cutoff rule are internal analysis definitions. Results are stored in `ads_vintage_dlq60_curve`, one row per release, origination quarter, and MOB.
 
-The observable denominator avoids counting younger loans that could not yet contribute an event at later MOBs. The earlier all-loans denominator understated later-month rates for recent vintages. At the end of a quarter's curve, the remaining eligible loans may still differ from the original group. For a chart, the platform includes points only while `eligible_loans >= 0.95 * cohort_loans`; the ADS table retains all calculated months. The 95% display threshold is an internal analysis definition. The Tableau chart that applies this threshold is `img/dlq60_curve.png`.
+The observable denominator avoids counting younger loans that could not yet contribute an event at later MOBs. An all-loans denominator would understate later-month rates for recent vintages. At the end of a quarter's curve, the remaining eligible loans may still differ from the original group. For a chart, the platform includes points only while `eligible_loans >= 0.95 * cohort_loans`; the ADS table retains all calculated months. The 95% display threshold is an internal analysis definition. The Tableau chart that applies this threshold is `img/dlq60_curve.png`.
 
-### Why the denominator changed on September 25, 2026
+### Why the denominator counts only observable loans
 
-The earlier denominator was every loan in the origination year. That is adequate for an older vintage such as 2010, but understates the rate for younger vintages: a loan originated in the second half of 2025 could not yet reach month 12 by the cutoff, so it could not contribute to the numerator while it was still counted in the denominator. For the 2025 vintage at month 12, the earlier result was 0.36% (182 / 50,000), while the revised observable-loan result was 0.69% (52 / 7,536). This revision is an internal analysis definition.
+A denominator of every loan in the origination year is adequate for an older vintage such as 2010, but understates the rate for younger vintages: a loan originated in the second half of 2025 cannot yet reach month 12 by the cutoff, so it cannot contribute to the numerator while it would still be counted in the denominator. For the 2025 vintage at month 12, an all-loans denominator gives 0.36% (182 / 50,000), while the observable-loan denominator gives 0.69% (52 / 7,536). This choice is an internal analysis definition.
 
 ### Why the curve groups by quarter and displays points only above 95% coverage
 

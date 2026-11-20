@@ -261,7 +261,7 @@ comment on column user_change_event.full_name is 'Full name after the change';
 comment on column user_change_event.is_active is 'Active status after the change';
 comment on column user_change_event.role_list is 'Role codes after the change';
 comment on column user_change_event.is_manager is 'Manager role after the change';
-comment on column user_change_event.loaded_at is 'Write-back time of the earlier sync process; the current process uses only the warehouse watermark table and no longer updates this column';
+comment on column user_change_event.loaded_at is 'Optional write-back time; the warehouse extraction tracks its progress in its own watermark table and does not write this column';
 comment on table review_rule is 'OLTP: review rules (which loans enter manual review); rule parameters are in review_rule_version, and changing a rule adds a new version instead of overwriting the old one';
 comment on column review_rule.rule_id is 'Rule ID';
 comment on column review_rule.rule_code is 'Rule code, unique';

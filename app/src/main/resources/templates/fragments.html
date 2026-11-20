@@ -3,7 +3,7 @@
   Parts shared by every page: head (title, styles), navigation bar, messages. Page text is in messages.properties (#{...}).
   All output uses th:text (which escapes < > & " as entities, preventing XSS); no inline scripts or style attributes (CSP allows only this site's style files).
 -->
-<html xmlns:th="http://www.thymeleaf.org" th:lang="${#locale.language == 'en'} ? 'en' : 'zh-CN'">
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
 <head th:fragment="head(title)">
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">

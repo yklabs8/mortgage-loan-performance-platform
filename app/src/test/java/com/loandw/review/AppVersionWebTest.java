@@ -24,7 +24,7 @@ import org.springframework.test.web.servlet.MockMvc;
 class AppVersionWebTest {
 
     private static String loginPage(MockMvc mvc) throws Exception {
-        return mvc.perform(get("/login").header("Accept-Language", "zh-CN")).andExpect(status().isOk())
+        return mvc.perform(get("/login").header("Accept-Language", "en")).andExpect(status().isOk())
             .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
     }
 

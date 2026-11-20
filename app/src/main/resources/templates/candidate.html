@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org" th:lang="${#locale.language == 'en'} ? 'en' : 'zh-CN'">
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
 <head th:replace="~{fragments :: head(#{candidate.title})}"></head><body>
 <header th:replace="~{fragments :: nav}"></header><main>
 <h1 th:text="#{candidate.heading(${c.loanIdentifier})}"></h1>
